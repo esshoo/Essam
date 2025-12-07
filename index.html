@@ -181,7 +181,7 @@
         // ===========================================
         // إعدادات المدير الحساسة
         
-        // 1. المعرف الثابت (غير هذا النص الطويل لشيء خاص بك جداً عند الرفع)
+        // 1. 
         const ADMIN_ID = "Essam-Host-Secure-ID-9988"; 
         
         // 2.
@@ -195,12 +195,12 @@
         let callObject = null, localStream = null, isCallActive = false, incomingReq = null;
         let audioCtx = null, ringOsc = null;
 
-        // --- عند فتح الصفحة: فحص الذاكرة ---
+        // 4.
         window.onload = function() {
-            const savedAdmin = localStorage.getItem('is_essam_admin_v2'); // مفتاح تخزين
+            const savedAdmin = localStorage.getItem('is_essam_admin_v2'); // 
             if (savedAdmin === 'true') {
                 myName = "عصام";
-                startApp(true); // دخول تلقائي كمدير
+                startApp(true); // 
             }
         };
 
@@ -222,12 +222,12 @@ function handleLoginBtn() {
     
     if (!myName) return alert("الرجاء كتابة الاسم");
 
-    // هل يحاول الدخول كمدير؟ (الحقل ظاهر)
+    // 
     if (passInput.style.display === 'block') {
-        // 1. نقوم بتشفير ما كتبه المستخدم الآن
+        // 1. 
         const inputHash = CryptoJS.SHA256(passInput.value).toString();
         
-        // 2. نقارن التشفير الجديد بالتشفير المحفوظ لدينا
+        // 2. 
         if (inputHash === PASS_HASH) {
             localStorage.setItem('is_essam_admin_v2', 'true'); 
             startApp(true);
@@ -240,7 +240,7 @@ function handleLoginBtn() {
 }
 
         function logoutAdmin() {
-            if(confirm("هل تريد تسجيل الخروج؟ سيتمكن جهاز آخر من الدخول كمدير.")) {
+            if(confirm("هل تريد تسجيل الخروج؟")) {
                 localStorage.removeItem('is_essam_admin_v2');
                 location.reload();
             }
@@ -250,18 +250,18 @@ function handleLoginBtn() {
             initAudio();
 
             if (isHost) {
-                // إظهار زر الخروج
+                // 
                 document.getElementById('logout-btn').style.display = 'block';
                 document.getElementById('chat-header-name').innerText = "لوحة عصام";
                 
-                // محاولة حجز المعرف
+                // 
                 peer = new Peer(ADMIN_ID);
                 showScreen('chat-screen');
                 document.getElementById('connection-status').innerText = "جاري حجز الخط...";
                 addSystemMessage("مرحباً عصام (المدير).");
 
             } else {
-                // ضيف
+                // 
                 document.getElementById('logout-btn').style.display = 'none';
                 peer = new Peer(); 
                 showScreen('chat-screen');
@@ -273,13 +273,13 @@ function handleLoginBtn() {
         }
 
         function setupPeerEvents(isHost) {
-            // معالجة الأخطاء (وهنا يكمن سر الحماية)
+            // 
             peer.on('error', (err) => {
                 if (err.type === 'unavailable-id') {
-                    // هذا يعني أن المعرف محجوز (المدير متصل بالفعل في مكان آخر)
+                    // 
                     if (isHost) {
                         alert("⚠️ تنبيه أمني:\nعصام متصل بالفعل من جهاز آخر!\nلا يمكنك الدخول من جهازين في نفس الوقت.");
-                        // خروج إجباري
+                        // 
                         localStorage.removeItem('is_essam_admin_v2');
                         location.reload();
                     }
@@ -294,7 +294,7 @@ function handleLoginBtn() {
             peer.on('open', (id) => {
                 if(isHost) {
                     document.getElementById('connection-status').innerText = "أنت متصل (المدير) ✅";
-                    // نجحنا في حجز الخط، الآن لا يمكن لأحد غيرك الدخول
+                    //
                 }
             });
 
@@ -302,7 +302,7 @@ function handleLoginBtn() {
             peer.on('call', (call) => { handleIncomingCall(call); });
         }
 
-        // --- باقي الكود (بدون تغيير) ---
+        // 
         function connectToAdmin() { conn = peer.connect(ADMIN_ID, { metadata: { name: myName } }); setupConnection(false); }
         function setupConnection(isHost) { conn.on('open', () => { document.getElementById('connection-status').innerText = "متصل ✅"; if(conn.metadata && conn.metadata.name) { updateHeaderName(conn.metadata.name); notifyUser('msg'); addSystemMessage(isHost ? `دخل ${conn.metadata.name} المحادثة` : "تم الاتصال بعصام"); } else { conn.send({ type: 'name-handshake', name: myName }); } }); conn.on('data', (data) => { if(typeof data === 'string') { addMessage(data, 'other'); notifyUser('msg'); } else if (data.type === 'name-handshake') { updateHeaderName(data.name); notifyUser('msg'); addSystemMessage(`الطرف الآخر: ${data.name}`); } else if (data.type === 'file') { const blob = new Blob([new Uint8Array(data.file)], { type: data.fileType }); renderFileMessage({ file: blob, fileType: data.fileType, fileName: data.fileName }, 'other'); notifyUser('msg'); } else if (data.type === 'call-end') { endCurrentCall(false); } }); conn.on('close', () => { document.getElementById('connection-status').innerText = "انقطع الاتصال ❌"; addSystemMessage("غادر الطرف الآخر."); }); }
         function updateHeaderName(name) { document.getElementById('chat-header-name').innerText = name; }
@@ -376,3 +376,4 @@ function handleLoginBtn() {
 </script>
 </body>
 </html>
+
