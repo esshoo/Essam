@@ -184,11 +184,11 @@
         // 1. المعرف الثابت (غير هذا النص الطويل لشيء خاص بك جداً عند الرفع)
         const ADMIN_ID = "Essam-Host-Secure-ID-9988"; 
         
-        // 2. كلمة المرور الخاصة بك (تم وضعها هنا لتعدلها بسهولة)
-        const MY_SECRET_PASS = "Essam.1972"; 
+        // 2.
+        const PASS_HASH = "61e54cf8a83c5f8b3d779b1766f82dd7e678dac5ab3a8ea856509757bbba5d3f"; 
         
-        // 3. الأسماء التي تكشف حقل الباسورد
-        const SECRET_NAMES = ["عصام", "admin", "Admin", "essam"];
+        // 3. 
+        const SECRET_NAMES = ["essho", "esshoo", "esshoa", "Essam"];
         // ===========================================
 
         let peer, conn, myName;
@@ -215,25 +215,29 @@
             }
         }
 
-        function handleLoginBtn() {
-            const nameInput = document.getElementById('my-name-input');
-            const passInput = document.getElementById('password-field');
-            myName = nameInput.value;
-            if (!myName) return alert("الرجاء كتابة الاسم");
+function handleLoginBtn() {
+    const nameInput = document.getElementById('my-name-input');
+    const passInput = document.getElementById('password-field');
+    myName = nameInput.value;
+    
+    if (!myName) return alert("الرجاء كتابة الاسم");
 
-            // هل يحاول الدخول كمدير؟
-            if (passInput.style.display === 'block') {
-                // مقارنة الباسورد
-                if (passInput.value === MY_SECRET_PASS) {
-                    localStorage.setItem('is_essam_admin_v2', 'true'); // حفظ الهوية
-                    startApp(true);
-                } else {
-                    alert("كلمة المرور خاطئة!");
-                }
-            } else {
-                startApp(false);
-            }
+    // هل يحاول الدخول كمدير؟ (الحقل ظاهر)
+    if (passInput.style.display === 'block') {
+        // 1. نقوم بتشفير ما كتبه المستخدم الآن
+        const inputHash = CryptoJS.SHA256(passInput.value).toString();
+        
+        // 2. نقارن التشفير الجديد بالتشفير المحفوظ لدينا
+        if (inputHash === PASS_HASH) {
+            localStorage.setItem('is_essam_admin_v2', 'true'); 
+            startApp(true);
+        } else {
+            alert("كلمة المرور خاطئة!");
         }
+    } else {
+        startApp(false);
+    }
+}
 
         function logoutAdmin() {
             if(confirm("هل تريد تسجيل الخروج؟ سيتمكن جهاز آخر من الدخول كمدير.")) {
