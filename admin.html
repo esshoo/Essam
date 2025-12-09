@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة تحكم عصام (Secure)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background: #333; color: white; padding: 20px; margin: 0; }
+        
+        /* إخفاء المحتوى تماماً حتى يتم التحقق */
+        #dashboard-content { display: none; }
+        
+        /* شاشة التحميل (تظهر أولاً) */
+        #security-check {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #222; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #e74c3c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* تنسيقات اللوحة */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #555; padding-bottom: 20px; }
+        .request-item { background: #444; padding: 15px; margin: 10px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-left: 5px; }
+        .btn-accept { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+
+    <div id="security-check">
+        <div class="loader"></div>
+        <p style="margin-top: 15px; color: #bbb;">جاري التحقق من الصلاحيات...</p>
+    </div>
+
+    <div id="dashboard-content">
+        <div class="header">
+            <h2>غرفة التحكم 🕹️</h2>
+            <div>
+                <span style="color: #4cd137; margin-left: 10px;">● متصل كمدير</span>
+                <button onclick="logout()" style="background: #555; color: white; border: none; padding: 5px 10px; cursor: pointer;">خروج</button>
+            </div>
+        </div>
+
+        <h3 style="margin-top: 30px;">قائمة الانتظار:</h3>
+        <div id="requests-list">
+            <p style="color: #777;" id="empty-msg">لا توجد طلبات جديدة...</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, onChildAdded, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // ⚠️⚠️⚠️ ضع إيميلك هنا بدقة ⚠️⚠️⚠️
+        const ADMIN_EMAIL = "essam.example@gmail.com"; 
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // --- حارس البوابة (Security Guard) ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // هل هذا الإيميل هو إيميل عصام؟
+                if (user.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+                    // ✅ نعم، هو المدير -> اسمح بالدخول
+                    document.getElementById('security-check').style.display = 'none';
+                    document.getElementById('dashboard-content').style.display = 'block';
+                    startDashboardLogic(); // شغل نظام الطلبات
+                } else {
+                    // ❌ مستخدم مسجل لكن ليس المدير -> حوله لصفحة العميل
+                    alert("عذراً، هذه الصفحة للمدير فقط!");
+                    window.location.href = "client.html";
+                }
+            } else {
+                // ❌ غير مسجل دخول أصلاً -> ارجع للبوابة
+                window.location.href = "index.html";
+            }
+        });
+
+        // --- منطق اللوحة (يعمل فقط بعد السماح) ---
+        function startDashboardLogic() {
+            const requestsRef = ref(db, 'requests');
+            onChildAdded(requestsRef, (snapshot) => {
+                const data = snapshot.val();
+                const key = snapshot.key;
+                if (data.status === 'pending') {
+                    document.getElementById('empty-msg').style.display = 'none';
+                    addRequestToUI(key, data.name, data.phone);
+                }
+            });
+        }
+
+        function addRequestToUI(key, name, phone) {
+            const list = document.getElementById('requests-list');
+            const div = document.createElement('div');
+            div.className = 'request-item';
+            div.id = `req-${key}`;
+            div.innerHTML = `
+                <div>
+                    <strong>👤 ${name}</strong> <br>
+                    <small>📞 ${phone}</small>
+                </div>
+                <div>
+                    <button class="btn btn-accept" onclick="acceptUser('${key}', '${name}')">قبول ✅</button>
+                    <button class="btn btn-reject" onclick="rejectUser('${key}')">رفض ❌</button>
+                </div>
+            `;
+            list.appendChild(div);
+        }
+
+        // دوال التحكم (Global)
+        window.acceptUser = function(key, name) {
+            update(ref(db, `requests/${key}`), { status: 'accepted' });
+            document.getElementById(`req-${key}`).style.display = 'none';
+            // يفتح صفحة الفيديو باسم العميل
+            window.open(`video.html?clientName=${encodeURIComponent(name)}`, '_blank');
+        }
+
+        window.rejectUser = function(key) {
+            update(ref(db, `requests/${key}`), { status: 'rejected' });
+            document.getElementById(`req-${key}`).style.display = 'none';
+        }
+
+        window.logout = function() {
+            signOut(auth).then(() => {
+                window.location.href = "index.html";
+            }).catch((error) => {
+                console.error("Error signing out: ", error);
+            });
+        }
+    </script>
+</body>
+</html>
