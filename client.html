@@ -28,11 +28,20 @@
         <button onclick="logout()" style="background:#555; margin-top:10px;">خروج</button>
     </div>
 
-    <div class="card hidden" id="waiting-card">
-        <div class="pulse">⏳</div>
-        <h3>جاري الاتصال بالمهندس...</h3>
-        <p>برجاء البقاء في هذه الصفحة.</p>
+<div class="card hidden" id="waiting-card">
+    <div class="pulse">⏳</div>
+    <h3 id="wait-title">جاري الاتصال...</h3>
+    <p id="wait-msg">برجاء البقاء في هذه الصفحة.</p>
+
+    <div id="client-actions">
+        <button onclick="showClientMsg()" style="background: #f39c12; margin-top: 15px;">📩 ترك رسالة (سيتم الرد بالإيميل)</button>
     </div>
+
+    <div id="client-msg-form" class="hidden" style="margin-top: 15px;">
+        <textarea id="c-msg-content" placeholder="بماذا يمكننا مساعدتك؟" style="width: 90%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;" rows="3"></textarea>
+        <button onclick="sendClientMessage()" style="background: #27ae60;">إرسال</button>
+    </div>
+</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -102,6 +111,40 @@
         window.logout = function() {
             signOut(auth).then(() => window.location.href = "index.html");
         }
+		window.showClientMsg = function() {
+    document.getElementById('client-actions').classList.add('hidden');
+    document.getElementById('client-msg-form').classList.remove('hidden');
+}
+
+window.sendClientMessage = function() {
+    const content = document.getElementById('c-msg-content').value;
+    if(!content) return alert("اكتب رسالتك");
+
+    // نستخدم بيانات جوجل مباشرة
+    push(ref(db, 'messages'), {
+        name: auth.currentUser.displayName,
+        contact: auth.currentUser.email, // الإيميل تلقائي
+        content: content,
+        type: 'Google User',
+        timestamp: Date.now()
+    }).then(() => {
+        alert("تم الإرسال! سيصلك الرد على إيميلك: " + auth.currentUser.email);
+        location.reload();
+    });
+}
+
+// تعديل جزء الرفض (داخل onValue):
+/*
+else if (status === 'rejected') {
+    document.getElementById('wait-title').innerText = "المهندس غير متاح حالياً";
+    document.getElementById('wait-msg').innerText = "يمكنك ترك رسالة وسنرد عليك عبر البريد الإلكتروني.";
+    document.getElementById('wait-msg').style.color = "#e74c3c";
+    
+    // إظهار النموذج فوراً
+    showClientMsg();
+}
+*/
     </script>
 </body>
 </html>
+
