@@ -122,12 +122,17 @@
         }
 
         // دوال التحكم (Global)
-        window.acceptUser = function(key, name) {
-            update(ref(db, `requests/${key}`), { status: 'accepted' });
-            document.getElementById(`req-${key}`).style.display = 'none';
-            // يفتح صفحة الفيديو باسم العميل
-            window.open(`video.html?clientName=${encodeURIComponent(name)}`, '_blank');
-        }
+    window.acceptUser = function(key, name) {
+    // 1. تحديث الحالة في فايربيس ليراها العميل
+    update(ref(db, `requests/${key}`), { status: 'accepted' });
+    
+    // 2. إخفاء الطلب من القائمة
+    document.getElementById(`req-${key}`).style.display = 'none';
+    
+    // 3. فتح صفحة الفيديو بصلاحيات (Admin) ورقم الغرفة (key)
+    // لاحظ: وضعنا role=admin
+    window.open(`video.html?room=${key}&role=admin&name=${encodeURIComponent(name)}`, '_blank');
+}
 
         window.rejectUser = function(key) {
             update(ref(db, `requests/${key}`), { status: 'rejected' });
@@ -144,4 +149,5 @@
     </script>
 </body>
 </html>
+
 
