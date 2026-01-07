@@ -122,21 +122,46 @@
         }
 
         // دوال التحكم (Global)
-    window.acceptUser = function(key, name) {
-    // 1. تحديث الحالة في فايربيس ليراها العميل
-    update(ref(db, `requests/${key}`), { status: 'accepted' });
-    
-    // 2. إخفاء الطلب من القائمة
-    document.getElementById(`req-${key}`).style.display = 'none';
-    
-    // 3. فتح صفحة الفيديو بصلاحيات (Admin) ورقم الغرفة (key)
-    // لاحظ: وضعنا role=admin
-    window.open(`video.html?room=${key}&role=admin&name=${encodeURIComponent(name)}`, '_blank');
-}
+// دوال التحكم (Global)
+        window.acceptUser = function(key, name) {
+            // 1. نغير شكل الزر لنعرف أن العملية بدأت
+            const btn = document.querySelector(`#req-${key} .btn-accept`);
+            if(btn) btn.innerText = "جاري الربط...";
+
+            // 2. نحاول تحديث الحالة في فايربيس (وننتظر النتيجة)
+            update(ref(db, `requests/${key}`), { status: 'accepted' })
+            .then(() => {
+                // ✅ نجاح: السيرفر قبل التعديل
+                console.log("تم قبول الطلب وحفظه في السيرفر");
+                
+                // إخفاء الطلب من القائمة
+                document.getElementById(`req-${key}`).style.display = 'none';
+
+                // 3. فتح الصفحة (حالياً فيديو، ولاحقاً نغيرها لصفحة الدردشة الشاملة)
+                // نرسل رقم الغرفة (key) والاسم والدور
+                window.open(`video.html?room=${key}&role=admin&name=${encodeURIComponent(name)}`, '_blank');
+            })
+            .catch((error) => {
+                // ❌ فشل: السيرفر رفض (وهنا سنعرف سبب المشكلة)
+                console.error("فشل التحديث:", error);
+                
+                // إعادة الزر كما كان
+                if(btn) btn.innerText = "قبول ✅";
+
+                // رسالة واضحة لك بالخطأ
+                alert("⛔ لا يمكن قبول الطلب!\nهناك مشكلة في الصلاحيات (Rules).\n\nرسالة الخطأ من جوجل:\n" + error.message);
+            });
+        }
 
         window.rejectUser = function(key) {
-            update(ref(db, `requests/${key}`), { status: 'rejected' });
-            document.getElementById(`req-${key}`).style.display = 'none';
+            // نفس المنطق للرفض (ننتظر التأكيد)
+            update(ref(db, `requests/${key}`), { status: 'rejected' })
+            .then(() => {
+                document.getElementById(`req-${key}`).style.display = 'none';
+            })
+            .catch((error) => {
+                alert("خطأ في الرفض: " + error.message);
+            });
         }
 
         window.logout = function() {
@@ -149,5 +174,6 @@
     </script>
 </body>
 </html>
+
 
 
