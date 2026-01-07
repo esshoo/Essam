@@ -136,9 +136,14 @@
         }
 
         // --- 2. إعداد الهوية ---
-        // admin-ROOM123 يتصل بـ client-ROOM123
-        const myPeerId = `${ROLE}-${ROOM_ID}`;
-        const targetPeerId = ROLE === 'admin' ? `client-${ROOM_ID}` : `admin-${ROOM_ID}`;
+// 1. تنظيف رقم الغرفة من أي رموز خاصة (مثل - أو _)
+        // هذا سيحول "-OiLuv..." إلى "OiLuv" فقط ويمنع مشكلة الشرطتين
+        const cleanRoomId = ROOM_ID.replace(/[^a-zA-Z0-9]/g, '');
+
+        // 2. استخدام شرطة سفلية (_) بدلاً من العادية (-) لأنها أكثر أماناً
+        const myPeerId = `${ROLE}_${cleanRoomId}`;
+        const targetPeerId = ROLE === 'admin' ? `client_${cleanRoomId}` : `admin_${cleanRoomId}`;
+        
         const displayName = ROLE === 'admin' ? "المهندس عصام" : MY_NAME;
 
         let peer, conn;
@@ -488,4 +493,5 @@
     </script>
 </body>
 </html>
+
 
