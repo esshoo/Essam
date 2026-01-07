@@ -1,326 +1,118 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>دعم فني - عصام</title>
-    
-    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>غرفة المحادثة</title>
     <style>
-        :root { --primary: #0088cc; --bg: #e5ddd5; --white: #ffffff; --green: #25d366; --red: #ff3b30; --msg-me: #dcf8c6; --dark: #333; }
-        body { font-family: 'Tajawal', sans-serif; margin: 0; background: #f0f2f5; height: 100vh; overflow: hidden; display: flex; justify-content: center; }
-
-        .screen { width: 100%; max-width: 500px; height: 100%; background: var(--bg); display: none; flex-direction: column; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
-        .active-screen { display: flex; }
-
-        /* شاشة الدخول */
-        #login-screen { background: var(--white); justify-content: center; align-items: center; padding: 20px; text-align: center; }
-        .login-box { width: 100%; }
-        input { width: 80%; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 10px; font-family: inherit; font-size: 16px; transition: 0.3s; }
-        #password-field { display: none; border: 2px solid var(--red); background-color: #fff0f0; }
-        .btn { padding: 12px 25px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; color: white; margin: 5px; font-family: inherit; width: 85%; }
-        .btn-primary { background: var(--primary); }
-
-        /* الهيدر */
-        .header { background: var(--primary); color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 60px; box-sizing: border-box; }
-        .user-info { display: flex; flex-direction: column; align-items: flex-start; }
-        .user-name { font-weight: bold; font-size: 1.1em; }
-        .user-status { font-size: 0.75em; opacity: 0.9; }
-
-        .controls-area { display: flex; align-items: center; gap: 8px; }
-
-        /* أزرار الاتصال */
-        .call-btn { background: none; border: none; color: white; font-size: 1.3em; cursor: pointer; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
-        .call-btn:hover { background: rgba(255,255,255,0.2); }
-        
-        /* زر التحكم بالكاميرا (الجديد) */
-        #my-cam-btn { 
-            font-size: 1.1em; 
-            border: 1px solid white; 
-            background: rgba(255,0,0,0.5); /* أحمر افتراضياً */
-            display: none; /* مخفي للعميل */
-        }
-        .cam-on { background: var(--green) !important; border-color: var(--green) !important; }
-
-        /* زر الخروج */
-        .logout-btn { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em; display: none; }
-
-        /* تأثير النبض عند الاتصال */
-        .btn-active-call { background-color: var(--red) !important; animation: pulse-red 1s infinite; }
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); } }
-
-        /* باقي التنسيقات (شات - فيديو - نوافذ) */
-        .chat-body { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .message { max-width: 75%; padding: 10px 15px; border-radius: 15px; font-size: 15px; position: relative; word-wrap: break-word; }
-        .msg-me { background: var(--msg-me); align-self: flex-end; border-bottom-left-radius: 0; }
-        .msg-other { background: var(--white); align-self: flex-start; border-bottom-right-radius: 0; }
-        .sys-msg { align-self: center; background: rgba(0,0,0,0.1); padding: 5px 15px; border-radius: 20px; font-size: 0.8em; color: #555; margin: 5px 0; text-align: center; }
-        .media-thumb { max-width: 200px; max-height: 150px; border-radius: 10px; margin-top: 5px; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); }
-        .file-link { display: flex; align-items: center; text-decoration: none; color: #333; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 10px; margin-top: 5px; }
-        .chat-footer { background: #f0f0f0; padding: 10px; display: flex; align-items: center; gap: 10px; }
-        .chat-footer input { margin: 0; flex: 1; border: none; padding: 12px; border-radius: 20px; }
-        .attach-btn { font-size: 1.5em; cursor: pointer; color: #555; padding: 0 10px; }
-
-        #incoming-modal, #video-modal, #lightbox-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; }
-        #incoming-modal { background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; color: white; }
-        #video-modal { background: black; }
-        #lightbox-modal { background: rgba(0,0,0,0.95); display: none; justify-content: center; align-items: center; z-index: 200; }
-        
-        #remote-video { width: 100%; height: 100%; object-fit: cover; }
-        #local-video { position: absolute; bottom: 20px; right: 20px; width: 100px; height: 140px; background: #333; border: 2px solid white; border-radius: 10px; object-fit: cover; transform: scaleX(-1); }
-        
-        #lightbox-img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        #lightbox-video { max-width: 100%; max-height: 100%; }
-        .close-lightbox { position: absolute; top: 20px; right: 20px; color: white; font-size: 30px; cursor: pointer; z-index: 201; background: rgba(0,0,0,0.5); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-        .incoming-actions { margin-top: 50px; display: flex; gap: 40px; }
-        .action-btn { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; color: white; border: none; }
+        body { margin: 0; background: #222; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: white; }
+        video { width: 45%; max-width: 600px; border-radius: 10px; background: black; margin: 10px; border: 2px solid #444; }
+        .controls { position: fixed; bottom: 20px; display: flex; gap: 20px; }
+        button { padding: 15px 30px; border-radius: 50px; border: none; cursor: pointer; font-size: 18px; font-weight: bold; }
+        .btn-end { background: #e74c3c; color: white; }
+        .btn-mic { background: #3498db; color: white; }
+        #status { position: absolute; top: 20px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 20px; }
     </style>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <div id="login-screen" class="screen active-screen">
-        <div class="login-box">
-            <h2 style="color: var(--primary);">تواصل مع عصام</h2>
-            <p>أدخل اسمك للدخول مباشرة</p>
-            <input type="text" id="my-name-input" placeholder="اسمك الكريم..." onkeyup="checkSecretName(this)">
-            <input type="password" id="password-field" placeholder="كلمة المرور">
-            <button class="btn btn-primary" onclick="handleLoginBtn()">دخول</button>
-        </div>
+    <div id="status">جاري إعداد الاتصال... ⏳</div>
+
+    <div style="display: flex; width: 100%; justify-content: center; flex-wrap: wrap;">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline></video>
     </div>
 
-    <div id="chat-screen" class="screen">
-        <div class="header">
-            <div class="user-info">
-                <div class="user-name" id="chat-header-name">عصام</div>
-                <div class="user-status" id="connection-status">جاري الاتصال...</div>
-            </div>
-            
-            <div class="controls-area">
-                <button class="call-btn" id="btn-audio" onclick="toggleCall('audio')">📞</button>
-                <button class="call-btn" id="btn-video" onclick="toggleCall('video')">📹</button>
-                
-                <button class="call-btn" id="my-cam-btn" onclick="toggleMyCam()" title="تفعيل/تعطيل الكاميرا">📷</button>
-                
-                <button id="logout-btn" class="logout-btn" onclick="logoutAdmin()">خروج</button>
-            </div>
-        </div>
-        <div class="chat-body" id="chat-box"></div>
-        <div class="chat-footer">
-            <span class="attach-btn" onclick="document.getElementById('file-input').click()">📎</span>
-            <input type="file" id="file-input" hidden onchange="sendFile(this)">
-            <input type="text" id="msg-input" placeholder="اكتب رسالة..." onkeypress="if(event.key==='Enter') sendText()">
-            <button class="btn btn-primary" style="margin:0; width: auto; border-radius: 50%; padding: 12px 15px;" onclick="sendText()">➤</button>
-        </div>
-    </div>
-
-    <div id="incoming-modal">
-        <div style="font-size:50px; margin-bottom:20px">📲</div>
-        <h3 id="incoming-caller-name">شخص ما</h3>
-        <p>يتصل بك...</p>
-        <div class="incoming-actions">
-            <button class="action-btn" style="background: var(--red);" onclick="rejectCall()">✖</button>
-            <button class="action-btn" style="background: var(--green);" onclick="acceptCall()">✔</button>
-        </div>
-    </div>
-    <div id="video-modal">
-        <video id="remote-video" autoplay playsinline></video>
-        <video id="local-video" autoplay muted playsinline></video>
-        <button class="action-btn" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:var(--red);" onclick="endCurrentCall()">📞</button>
-    </div>
-    <div id="lightbox-modal">
-        <div class="close-lightbox" onclick="closeLightbox()">✖</div>
-        <div id="lightbox-content"></div>
+    <div class="controls">
+        <button class="btn-mic" onclick="toggleMic()">🎤 كتم الصوت</button>
+        <button class="btn-end" onclick="endCall()">❌ إنهاء</button>
     </div>
 
     <script>
-        // --- إعدادات المدير ---
-        const ADMIN_ID = "Essam-Host-Secure-ID-9988"; 
-        const PASS_HASH = "61e54cf8a83c5f8b3d779b1766f82dd7e678dac5ab3a8ea856509757bbba5d3f"; // Essam.1972
-        const SECRET_NAMES = ["عصام", "admin", "Admin", "essam"];
-        
-        let peer, conn, myName;
-        let callObject = null, localStream = null, isCallActive = false, incomingReq = null;
-        let audioCtx = null, ringOsc = null;
-        
-        // حالة كاميرا المدير (افتراضياً مغلقة = false)
-        let myCamEnabled = false; 
+        // 1. استخراج البيانات من الرابط (المفتاح السحري)
+        const urlParams = new URLSearchParams(window.location.search);
+        const ROOM_ID = urlParams.get('room'); // رقم الطلب
+        const ROLE = urlParams.get('role');    // admin أو client
 
-        window.onload = function() {
-            const savedAdmin = localStorage.getItem('is_essam_admin_v2');
-            if (savedAdmin === 'true') { myName = "عصام"; startApp(true); }
-        };
-
-        // --- دوال الكاميرا والتحكم ---
-        function toggleMyCam() {
-            myCamEnabled = !myCamEnabled; // قلب الحالة
-            updateCamBtnUI();
-            
-            // إذا كانت المكالمة جارية، نطبق التغيير فوراً
-            if(localStream) {
-                const videoTrack = localStream.getVideoTracks()[0];
-                if(videoTrack) videoTrack.enabled = myCamEnabled;
-            }
+        if (!ROOM_ID || !ROLE) {
+            alert("رابط غير صالح! يجب الدخول عبر التطبيق.");
+            window.location.href = 'index.html';
         }
 
-        function updateCamBtnUI() {
-            const btn = document.getElementById('my-cam-btn');
-            if(myCamEnabled) {
-                btn.classList.add('cam-on'); // أخضر
-                btn.innerHTML = "📷"; // كاميرا
+        const statusEl = document.getElementById('status');
+        let localStream;
+        let currentCall;
+
+        // تحديد الأسماء بناءً على الدور (لتسهيل الاتصال)
+        // إذا كان رقم الطلب 123
+        // المدير سيكون اسمه: admin-123
+        // العميل سيكون اسمه: client-123
+        const myPeerId = `${ROLE}-${ROOM_ID}`;
+        const targetPeerId = ROLE === 'admin' ? `client-${ROOM_ID}` : `admin-${ROOM_ID}`;
+
+        // إعداد PeerJS
+        const peer = new Peer(myPeerId);
+
+        // تشغيل الكاميرا
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+            localStream = stream;
+            document.getElementById('localVideo').srcObject = stream;
+
+            if (ROLE === 'admin') {
+                statusEl.innerText = "بانتظار العميل... 📞";
+                // المدير هو من يبادر بالاتصال (لأن العميل فتح الصفحة قبله غالباً)
+                connectToClient();
             } else {
-                btn.classList.remove('cam-on'); // أحمر
-                btn.innerHTML = "🚫"; // مغلق
+                statusEl.innerText = "بانتظار دخول المهندس عصام... ⏳";
             }
-        }
+        }).catch(err => {
+            alert("لا يمكن الوصول للكاميرا: " + err);
+        });
 
-        // --- باقي دوال النظام ---
-        function checkSecretName(input) {
-            const val = input.value.trim();
-            const passField = document.getElementById('password-field');
-            if (SECRET_NAMES.includes(val)) { passField.style.display = 'block'; passField.focus(); } else { passField.style.display = 'none'; }
-        }
-
-        function handleLoginBtn() {
-            const nameInput = document.getElementById('my-name-input');
-            const passInput = document.getElementById('password-field');
-            myName = nameInput.value;
-            if (!myName) return alert("الرجاء كتابة الاسم");
-
-            if (passInput.style.display === 'block') {
-                const inputHash = CryptoJS.SHA256(passInput.value).toString();
-                if (inputHash === PASS_HASH) {
-                    localStorage.setItem('is_essam_admin_v2', 'true'); 
-                    startApp(true);
-                } else { alert("كلمة المرور خاطئة!"); }
-            } else { startApp(false); }
-        }
-
-        function logoutAdmin() {
-            if(confirm("تسجيل خروج؟")) { localStorage.removeItem('is_essam_admin_v2'); location.reload(); }
-        }
-
-        function startApp(isHost) {
-            initAudio();
-            if (isHost) {
-                // إظهار أزرار المدير
-                document.getElementById('logout-btn').style.display = 'block';
-                document.getElementById('my-cam-btn').style.display = 'flex'; 
-                updateCamBtnUI(); // تحديث لون الزر
-                document.getElementById('chat-header-name').innerText = "لوحة عصام";
-                
-                peer = new Peer(ADMIN_ID);
-                showScreen('chat-screen');
-                document.getElementById('connection-status').innerText = "جاري الحجز...";
-                addSystemMessage("أهلاً عصام. الكاميرا مغلقة افتراضياً.");
-            } else {
-                // العميل لا يرى زر الكاميرا ولا الخروج
-                document.getElementById('logout-btn').style.display = 'none';
-                document.getElementById('my-cam-btn').style.display = 'none';
-                
-                peer = new Peer(); 
-                showScreen('chat-screen');
-                document.getElementById('connection-status').innerText = "جاري الاتصال...";
-                peer.on('open', () => { connectToAdmin(); });
-            }
-            setupPeerEvents(isHost);
-        }
-
-        function setupPeerEvents(isHost) {
-            peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') { if (isHost) { alert("عصام متصل بجهاز آخر!"); localStorage.removeItem('is_essam_admin_v2'); location.reload(); } }
-                else if (err.type === 'peer-unavailable') { document.getElementById('connection-status').innerText = "عصام غير متاح ❌"; addSystemMessage("عصام غير متصل حالياً."); }
-            });
-            peer.on('open', (id) => { if(isHost) document.getElementById('connection-status').innerText = "أنت المدير ✅"; });
-            peer.on('connection', (c) => { conn = c; setupConnection(isHost); });
-            peer.on('call', (call) => { handleIncomingCall(call); });
-        }
-
-        function connectToAdmin() { conn = peer.connect(ADMIN_ID, { metadata: { name: myName } }); setupConnection(false); }
-        function setupConnection(isHost) { conn.on('open', () => { document.getElementById('connection-status').innerText = "متصل ✅"; if(conn.metadata && conn.metadata.name) { updateHeaderName(conn.metadata.name); notifyUser('msg'); addSystemMessage(isHost ? `دخل ${conn.metadata.name}` : "تم الاتصال بعصام"); } else { conn.send({ type: 'name-handshake', name: myName }); } }); conn.on('data', (data) => { if(typeof data === 'string') { addMessage(data, 'other'); notifyUser('msg'); } else if (data.type === 'name-handshake') { updateHeaderName(data.name); notifyUser('msg'); addSystemMessage(`الطرف الآخر: ${data.name}`); } else if (data.type === 'file') { const blob = new Blob([new Uint8Array(data.file)], { type: data.fileType }); renderFileMessage({ file: blob, fileType: data.fileType, fileName: data.fileName }, 'other'); notifyUser('msg'); } else if (data.type === 'call-end') { endCurrentCall(false); } }); conn.on('close', () => { document.getElementById('connection-status').innerText = "انقطع الاتصال ❌"; }); }
-        
-        // دوال المساعدة
-        function updateHeaderName(name) { document.getElementById('chat-header-name').innerText = name; }
-        function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen')); document.getElementById(id).classList.add('active-screen'); }
-        function sendText() { const txt = document.getElementById('msg-input').value; if(!txt || !conn) return; conn.send(txt); addMessage(txt, 'me'); document.getElementById('msg-input').value = ''; }
-        function addMessage(content, source) { const box = document.getElementById('chat-box'); const div = document.createElement('div'); div.className = `message ${source === 'me' ? 'msg-me' : 'msg-other'}`; div.innerText = content; box.appendChild(div); box.scrollTop = box.scrollHeight; }
-        function addSystemMessage(txt) { const box = document.getElementById('chat-box'); const div = document.createElement('div'); div.className = 'sys-msg'; div.innerText = txt; box.appendChild(div); box.scrollTop = box.scrollHeight; }
-        function sendFile(input) { const file = input.files[0]; if (!file || !conn) return; const reader = new FileReader(); reader.onload = (e) => { const buffer = e.target.result; conn.send({ type: 'file', file: buffer, fileName: file.name, fileType: file.type }); const blob = new Blob([buffer], { type: file.type }); renderFileMessage({ file: blob, fileType: file.type, fileName: file.name }, 'me'); }; reader.readAsArrayBuffer(file); input.value = ''; }
-        function renderFileMessage(data, source) { const box = document.getElementById('chat-box'); const div = document.createElement('div'); div.className = `message ${source === 'me' ? 'msg-me' : 'msg-other'}`; const url = URL.createObjectURL(data.file); if (data.fileType.startsWith('image/')) { div.innerHTML = `<img src="${url}" class="media-thumb" onclick="openLightbox('${url}', 'img')">`; } else if (data.fileType.startsWith('video/')) { div.innerHTML = `<video src="${url}" class="media-thumb" onclick="openLightbox('${url}', 'video')"></video>`; } else { div.innerHTML = `<a href="${url}" download="${data.fileName}" class="file-link">📎 ${data.fileName}</a>`; } box.appendChild(div); box.scrollTop = box.scrollHeight; }
-        function openLightbox(url, type) { const modal = document.getElementById('lightbox-modal'); const content = document.getElementById('lightbox-content'); modal.style.display = 'flex'; if(type === 'img') content.innerHTML = `<img src="${url}" id="lightbox-img">`; else content.innerHTML = `<video src="${url}" controls autoplay id="lightbox-video"></video>`; }
-        function closeLightbox() { document.getElementById('lightbox-modal').style.display = 'none'; document.getElementById('lightbox-content').innerHTML = ''; }
-        function initAudio() { if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if(audioCtx.state === 'suspended') audioCtx.resume(); }
-        function notifyUser(type) { if(!audioCtx) return; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination); if (type === 'msg') { osc.type = 'sine'; osc.frequency.setValueAtTime(600, audioCtx.currentTime); gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5); osc.start(); osc.stop(audioCtx.currentTime + 0.5); if(navigator.vibrate) navigator.vibrate(200); } else if (type === 'ring') { osc.type = 'triangle'; osc.frequency.setValueAtTime(400, audioCtx.currentTime); gain.gain.setValueAtTime(0.5, audioCtx.currentTime); osc.start(); ringOsc = { osc: osc, gain: gain }; if(window.ringInterval) clearInterval(window.ringInterval); window.ringInterval = setInterval(() => { if(audioCtx.state === 'running') { const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.setValueAtTime(440, audioCtx.currentTime); g.gain.setValueAtTime(0.3, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5); o.start(); o.stop(audioCtx.currentTime + 0.5); } }, 1500); if(navigator.vibrate) navigator.vibrate([500, 200, 500]); } }
-        function stopNotification() { if(window.ringInterval) clearInterval(window.ringInterval); if(ringOsc) { try{ ringOsc.osc.stop(); }catch(e){} ringOsc=null; } if(navigator.vibrate) navigator.vibrate(0); }
-
-        // --- منطق الاتصال (المعدل) ---
-        function toggleCall(type) { if (isCallActive) { if (confirm("إنهاء المكالمة؟")) endCurrentCall(true); } else startCall(type); }
-
-        function startCall(type) {
-            if(!conn) return alert("انتظر الطرف الآخر");
+        // 1. استقبال الاتصال (للعميل وللمدير أيضاً)
+        peer.on('call', call => {
+            statusEl.innerText = "تم الاتصال! ✅";
+            call.answer(localStream); // الرد وإرسال الفيديو الخاص بي
             
-            // طلب الكاميرا: دائماً نطلب الفيديو، ولكن نتحكم في إظهاره بناء على زر الكاميرا
-            navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(stream => {
-                localStream = stream;
-                
-                // تطبيق حالة الكاميرا (مغلقة/مفتوحة) فوراً قبل البدء
-                // إذا كان المدير هو المتصل والكاميرا مغلقة -> نغلق الفيديو لديه
-                // العميل: ليس لديه زر تحكم، فدائماً الكاميرا مفتوحة (myCamEnabled تكون false عنده لكنه لا يملك الزر للتحكم بها، سنعالجها)
-                
-                // ملاحظة: myCamEnabled خاصة بالواجهة.
-                // للعميل: نريدها دائما true. للمدير: حسب الزر.
-                // الحل: إذا لم يكن الزر موجوداً (العميل)، نعتبر الكاميرا مفتوحة.
-                const hasCamBtn = document.getElementById('my-cam-btn').style.display !== 'none';
-                
-                if(hasCamBtn) {
-                    // أنا المدير: طبق حالة الزر
-                    localStream.getVideoTracks()[0].enabled = myCamEnabled;
-                } else {
-                    // أنا العميل: الكاميرا دائماً مفتوحة
-                    localStream.getVideoTracks()[0].enabled = true;
-                }
-
-                if(type === 'video') {
-                    document.getElementById('video-modal').style.display = 'block';
-                    document.getElementById('local-video').srcObject = stream;
-                }
-                
-                const call = peer.call(conn.peer, stream, { metadata: { type: type, name: myName } });
-                handleCallStream(call);
-                setCallActiveState(true, type);
+            call.on('stream', remoteStream => {
+                document.getElementById('remoteVideo').srcObject = remoteStream;
             });
+            currentCall = call;
+        });
+
+        // 2. دالة اتصال المدير بالعميل
+        function connectToClient() {
+            // محاولة الاتصال كل ثانيتين حتى ينجح (في حال كان العميل لسه بيحمل الصفحة)
+            const connLoop = setInterval(() => {
+                if (currentCall) { clearInterval(connLoop); return; } // لو اتصلنا خلاص وقف المحاولات
+                
+                const call = peer.call(targetPeerId, localStream);
+                
+                if (call) {
+                    call.on('stream', remoteStream => {
+                        document.getElementById('remoteVideo').srcObject = remoteStream;
+                        statusEl.innerText = "متصل بالعميل ✅";
+                        clearInterval(connLoop);
+                        currentCall = call;
+                    });
+                    
+                    // لو العميل لسه مفنش الصفحة، الخطأ ده هيحصل وهنجرب تاني
+                    call.on('error', err => { console.log("Retrying connection..."); });
+                }
+            }, 2000); 
         }
 
-        function handleIncomingCall(call) { incomingReq = call; document.getElementById('incoming-modal').style.display = 'flex'; document.getElementById('incoming-caller-name').innerText = (call.metadata && call.metadata.name) ? call.metadata.name : "مجهول"; notifyUser('ring'); }
-
-        function acceptCall() {
-            stopNotification();
-            document.getElementById('incoming-modal').style.display = 'none';
-            const isVideo = incomingReq.metadata.type === 'video';
-            
-            navigator.mediaDevices.getUserMedia({video: isVideo, audio: true}).then(stream => {
-                localStream = stream;
-                
-                // تطبيق حالة الكاميرا عند الرد أيضاً
-                const hasCamBtn = document.getElementById('my-cam-btn').style.display !== 'none';
-                if(hasCamBtn && isVideo) {
-                    localStream.getVideoTracks()[0].enabled = myCamEnabled;
-                }
-
-                incomingReq.answer(stream);
-                if(isVideo) {
-                    document.getElementById('video-modal').style.display = 'block';
-                    document.getElementById('local-video').srcObject = stream;
-                }
-                handleCallStream(incomingReq);
-                setCallActiveState(true, incomingReq.metadata.type);
-            });
+        // أزرار التحكم
+        function toggleMic() {
+            const audioTrack = localStream.getAudioTracks()[0];
+            audioTrack.enabled = !audioTrack.enabled;
         }
 
-        function handleCallStream(call) { callObject = call; call.on('stream', remoteStream => { if(document.getElementById('video-modal').style.display === 'block') { document.getElementById('remote-video').srcObject = remoteStream; } else { const audio = new Audio(); audio.srcObject = remoteStream; audio.play(); } }); call.on('close', () => endCurrentCall(false)); }
-        function endCurrentCall(notify = true) { if(callObject) callObject.close(); if(localStream) localStream.getTracks().forEach(t => t.stop()); document.getElementById('video-modal').style.display = 'none'; setCallActiveState(false); if(notify && conn) conn.send({type: 'call-end'}); }
-        function setCallActiveState(active, type) { isCallActive = active; const btnAudio = document.getElementById('btn-audio'); const btnVideo = document.getElementById('btn-video'); btnAudio.classList.remove('btn-active-call'); btnVideo.classList.remove('btn-active-call'); if(active) { if(type === 'audio') btnAudio.classList.add('btn-active-call'); if(type === 'video') btnVideo.classList.add('btn-active-call'); } }
+        function endCall() {
+            if (currentCall) currentCall.close();
+            window.close(); // إغلاق النافذة
+        }
     </script>
 </body>
 </html>
