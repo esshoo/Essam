@@ -86,17 +86,20 @@
             document.getElementById('waiting-card').classList.remove('hidden');
 
             // مراقبة الحالة
-            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
-                const status = snapshot.val();
-                if (status === 'accepted') {
-                    // الانتقال للفيديو
-                    window.location.href = `video.html?clientName=${encodeURIComponent(name)}`;
-                } else if (status === 'rejected') {
-                    alert("نعتذر، لا يمكن الرد حالياً.");
-                    location.reload();
-                }
-            });
+onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+    const status = snapshot.val();
+    if (status === 'accepted') {
+        // ✅ التعديل الضروري:
+        // نرسل (reqId) كرقم للغرفة، ونحدد الدور أنه (client)
+        window.location.href = `video.html?room=${reqId}&role=client`;
+        
+    } else if (status === 'rejected') {
+        alert("نعتذر، لا يمكن الرد حالياً.");
+        location.reload();
+    }
+});
         }
     </script>
 </body>
 </html>
+
