@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل طلب - ضيف</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; }
+        button { width: 100%; padding: 12px; background: #0088cc; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .hidden { display: none; }
+        .status-box { margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; color: #0d47a1; }
+        .pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="form-card">
+        <h2>طلب محادثة 📹</h2>
+        <p>أدخل بياناتك ليتواصل معك م. عصام</p>
+        <input type="text" id="name" placeholder="الاسم الكريم">
+        <input type="tel" id="phone" placeholder="رقم الجوال">
+        <button onclick="submitRequest()">إرسال الطلب</button>
+    </div>
+
+    <div class="card hidden" id="waiting-card">
+        <div class="pulse" style="font-size: 50px;">⏳</div>
+        <h3>جاري الانتظار...</h3>
+        <p class="status-box">تم إرسال طلبك. انتظر قبول المهندس عصام للدخول فوراً.</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // إعدادات Firebase (نفسها في كل الملفات)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+        
+        let myUid = null;
+
+        // التأكد من أن المستخدم مسجل دخول (حتى لو ضيف)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                myUid = user.uid; // حفظنا رقم الهوية لاستخدامه
+            } else {
+                // لو مش مسجل يرجع للبوابة
+                window.location.href = "index.html";
+            }
+        });
+
+        window.submitRequest = function() {
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+
+            if(!name || !phone) return alert("البيانات ناقصة");
+            if(!myUid) return alert("جاري التحميل... حاول مرة أخرى");
+
+            const newRequestRef = push(ref(db, 'requests'));
+            const reqId = newRequestRef.key;
+            
+            set(newRequestRef, {
+                name: name,
+                phone: phone,
+                status: 'pending',
+                timestamp: Date.now(),
+                uid: myUid // ✅✅✅ هذا هو التعديل الأمني المهم
+            });
+
+            // إظهار الانتظار
+            document.getElementById('form-card').classList.add('hidden');
+            document.getElementById('waiting-card').classList.remove('hidden');
+
+            // مراقبة الحالة
+            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+                const status = snapshot.val();
+                if (status === 'accepted') {
+                    // الانتقال للفيديو
+                    window.location.href = `video.html?clientName=${encodeURIComponent(name)}`;
+                } else if (status === 'rejected') {
+                    alert("نعتذر، لا يمكن الرد حالياً.");
+                    location.reload();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
