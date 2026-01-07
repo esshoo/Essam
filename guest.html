@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -26,11 +27,24 @@
         <button onclick="submitRequest()">إرسال الطلب</button>
     </div>
 
-    <div class="card hidden" id="waiting-card">
-        <div class="pulse" style="font-size: 50px;">⏳</div>
-        <h3>جاري الانتظار...</h3>
-        <p class="status-box">تم إرسال طلبك. انتظر قبول المهندس عصام للدخول فوراً.</p>
+<div class="card hidden" id="waiting-card">
+    <div class="pulse" style="font-size: 50px;">⏳</div>
+    <h3>جاري تبليغ المهندس...</h3>
+    <p class="status-box" id="status-text">يرجى الانتظار، سيتم تحويلك فور القبول.</p>
+    
+    <div id="wait-actions" style="margin-top: 20px;">
+        <button onclick="showMsgForm()" style="background: #f39c12;">📝 اترك رسالة واخرج</button>
+        <button onclick="switchToLogin()" style="background: #7f8c8d; margin-top: 10px;">🔄 دخول بإيميل (إلغاء الضيف)</button>
     </div>
+
+    <div id="msg-form" class="hidden" style="text-align: right; margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+        <p style="font-size: 14px; color: #555;">أكتب رسالتك وسنتواصل معك:</p>
+        <input type="text" id="msg-contact" placeholder="رقم واتساب أو إيميل للتواصل" style="width: 90%;">
+        <textarea id="msg-content" placeholder="اكتب رسالتك هنا..." style="width: 90%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit;" rows="3"></textarea>
+        <button onclick="sendOfflineMessage('guest')" style="background: #27ae60;">إرسال وإنهاء</button>
+        <button onclick="hideMsgForm()" style="background: transparent; color: #555; margin-top: 0;">إلغاء</button>
+    </div>
+</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -101,6 +115,54 @@ onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
     }
 });
         }
+        // 1. التبديل إلى تسجيل الدخول
+window.switchToLogin = function() {
+    // حذف بيانات الضيف وتسجيل الخروج
+    auth.signOut().then(() => {
+        window.location.href = "index.html";
+    });
+}
+
+// 2. إظهار وإخفاء نموذج الرسالة
+window.showMsgForm = function() {
+    document.getElementById('wait-actions').classList.add('hidden');
+    document.getElementById('msg-form').classList.remove('hidden');
+}
+
+window.hideMsgForm = function() {
+    document.getElementById('msg-form').classList.add('hidden');
+    document.getElementById('wait-actions').classList.remove('hidden');
+}
+
+// 3. إرسال الرسالة
+window.sendOfflineMessage = function(userType) {
+    const contact = document.getElementById('msg-contact').value;
+    const content = document.getElementById('msg-content').value;
+    
+    if(!content || !contact) return alert("الرجاء كتابة الرسالة وطريقة التواصل");
+
+    push(ref(db, 'messages'), {
+        name: document.getElementById('name').value || "ضيف",
+        contact: contact,
+        content: content,
+        type: userType,
+        timestamp: Date.now()
+    }).then(() => {
+        alert("تم إرسال رسالتك بنجاح! سنتواصل معك قريباً.");
+        location.reload(); // إعادة تحميل الصفحة للبداية
+    });
+}
+
+// 4. تعديل مراقبة الرفض (داخل submitRequest)
+// استبدل جزء الـ else if (status === 'rejected') بهذا:
+/*
+else if (status === 'rejected') {
+    document.getElementById('status-text').innerText = "نعتذر، المهندس مشغول حالياً.";
+    document.getElementById('status-text').style.color = "red";
+    // نظهر نموذج الرسالة تلقائياً عند الرفض
+    showMsgForm();
+}
+*/
     </script>
 </body>
 </html>
