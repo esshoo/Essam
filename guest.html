@@ -86,13 +86,15 @@
             document.getElementById('waiting-card').classList.remove('hidden');
 
             // مراقبة الحالة
+// هذا الكود يوضع داخل دالة submitRequest في النهاية
 onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
     const status = snapshot.val();
+    console.log("حالة الطلب الآن:", status); // هذا السطر سيظهر لك في الكونسول للمراقبة
+
     if (status === 'accepted') {
-        // ✅ التعديل الضروري:
-        // نرسل (reqId) كرقم للغرفة، ونحدد الدور أنه (client)
+        // ✅ التحويل الصحيح للفيديو الجديد
+        console.log("تم القبول! جاري التحويل...");
         window.location.href = `video.html?room=${reqId}&role=client`;
-        
     } else if (status === 'rejected') {
         alert("نعتذر، لا يمكن الرد حالياً.");
         location.reload();
@@ -102,4 +104,5 @@ onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
     </script>
 </body>
 </html>
+
 
