@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>طلب خدمة عملاء</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        .user-img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; border: 3px solid #0088cc; }
+        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
+        .hidden { display: none; }
+        .pulse { animation: pulse 1.5s infinite; font-size: 40px; margin: 10px 0; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="form-card">
+        <img id="u-img" src="" class="user-img">
+        <h3 id="u-name">أهلاً بك</h3>
+        <p style="color: #666;">اضغط الزر لطلب محادثة فيديو فورية مع المهندس عصام</p>
+        
+        <input type="tel" id="phone" placeholder="رقم جوالك (للتواصل)" style="width:90%; padding:10px; margin-top:10px; border:1px solid #ddd; border-radius:5px;">
+        
+        <button onclick="submitRequest()">📞 طلب محادثة الآن</button>
+        <button onclick="logout()" style="background:#555; margin-top:10px;">خروج</button>
+    </div>
+
+    <div class="card hidden" id="waiting-card">
+        <div class="pulse">⏳</div>
+        <h3>جاري الاتصال بالمهندس...</h3>
+        <p>برجاء البقاء في هذه الصفحة.</p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs", // تأكد من مفاتيحك
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+        
+        let userUid = null;
+        let userName = "";
+
+        // التحقق من الدخول
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userUid = user.uid;
+                userName = user.displayName || "عميل مميز";
+                
+                document.getElementById('u-name').innerText = "أهلاً، " + userName;
+                document.getElementById('u-img').src = user.photoURL || "https://ui-avatars.com/api/?name=" + userName;
+            } else {
+                window.location.href = "index.html";
+            }
+        });
+
+        window.submitRequest = function() {
+            const phone = document.getElementById('phone').value;
+            if(!phone) return alert("يرجى كتابة رقم الهاتف");
+
+            document.getElementById('form-card').classList.add('hidden');
+            document.getElementById('waiting-card').classList.remove('hidden');
+
+            const newRequestRef = push(ref(db, 'requests'));
+            const reqId = newRequestRef.key;
+            
+            set(newRequestRef, {
+                name: userName + " (Google)",
+                phone: phone,
+                status: 'pending',
+                timestamp: Date.now(),
+                uid: userUid
+            });
+
+            // مراقبة الرد
+            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+                const status = snapshot.val();
+                if (status === 'accepted') {
+                    // تحويل لغرفة الفيديو
+                    window.location.href = `video.html?room=${reqId}&role=client`;
+                } else if (status === 'rejected') {
+                    alert("نعتذر، لا يمكن الرد حالياً.");
+                    location.reload();
+                }
+            });
+        }
+
+        window.logout = function() {
+            signOut(auth).then(() => window.location.href = "index.html");
+        }
+    </script>
+</body>
+</html>
