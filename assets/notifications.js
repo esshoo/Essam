@@ -33,7 +33,10 @@ export async function enableNotifications(){
   if(!messaging) await initMessaging();
   if(!messaging) throw new Error("Messaging unsupported");
 
-  const token = await getToken(messaging, { vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
+  const token = await getToken(messaging, {
+  vapidKey: FCM_VAPID_KEY,
+  serviceWorkerRegistration: reg
+});
   if(token){
     await saveFcmToken(user.uid, token);
     toast("تم تفعيل الإشعارات", "سيتم إرسال تنبيهات عند وجود تحديثات.");
