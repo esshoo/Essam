@@ -1,150 +1,161 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>طلب خدمة عملاء</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Tajawal', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
-        .user-img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; border: 3px solid #0088cc; }
-        button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
-        .hidden { display: none; }
-        .pulse { animation: pulse 1.5s infinite; font-size: 40px; margin: 10px 0; }
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-    </style>
+<title>Essam Support • Client</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1 class="h1">العميل</h1>
+        <div class="small" id="who"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
+      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
+    </div>
+  </div>
 
-    <div class="card" id="form-card">
-        <img id="u-img" src="" class="user-img">
-        <h3 id="u-name">أهلاً بك</h3>
-        <p style="color: #666;">اضغط الزر لطلب محادثة فيديو فورية مع المهندس عصام</p>
-        
-        <input type="tel" id="phone" placeholder="رقم جوالك (للتواصل)" style="width:90%; padding:10px; margin-top:10px; border:1px solid #ddd; border-radius:5px;">
-        
-        <button onclick="submitRequest()">📞 طلب محادثة الآن</button>
-        <button onclick="logout()" style="background:#555; margin-top:10px;">خروج</button>
+  <div class="grid">
+    <div class="card">
+      <div class="title">إرسال طلب دعم</div>
+      <div class="small">املأ البيانات ثم اضغط إرسال.</div>
+      <hr/>
+      <div class="label">رقم الهاتف (اختياري)</div>
+      <input class="input" id="phone" placeholder="05xxxxxxxx" />
+      <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
+      <textarea class="input" id="note" rows="4" placeholder="اكتب وصف مختصر للمشكلة..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnSend">إرسال الطلب</button>
+        <span class="badge" id="statusBadge">جاهز</span>
+      </div>
+      <div class="small" id="reqInfo" style="margin-top:10px"></div>
     </div>
 
-<div class="card hidden" id="waiting-card">
-    <div class="pulse">⏳</div>
-    <h3 id="wait-title">جاري الاتصال...</h3>
-    <p id="wait-msg">برجاء البقاء في هذه الصفحة.</p>
-
-    <div id="client-actions">
-        <button onclick="showClientMsg()" style="background: #f39c12; margin-top: 15px;">📩 ترك رسالة (سيتم الرد بالإيميل)</button>
+    <div class="card">
+      <div class="title">رسالة أوفلاين</div>
+      <div class="small">إذا لم تكن الجلسة متاحة، اترك رسالة للمدير.</div>
+      <hr/>
+      <textarea class="input" id="offlineText" rows="6" placeholder="اكتب رسالتك..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
+      </div>
+      <div class="small">ستظهر هذه الرسالة للمدير في لوحة التحكم.</div>
     </div>
+  </div>
 
-    <div id="client-msg-form" class="hidden" style="margin-top: 15px;">
-        <textarea id="c-msg-content" placeholder="بماذا يمكننا مساعدتك؟" style="width: 90%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;" rows="3"></textarea>
-        <button onclick="sendClientMessage()" style="background: #27ae60;">إرسال</button>
-    </div>
+  <div class="footer">بعد قبول الطلب ستظهر لك زر الدخول إلى غرفة التواصل.</div>
 </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+<script type="module">
+  import { requireAuth, logout } from "./assets/auth.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
+  import { toast } from "./assets/ui.js";
+  import { initMessaging, wireNotificationButton } from "./assets/notifications.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs", // تأكد من مفاتيحك
-            authDomain: "essam-support.firebaseapp.com",
-            projectId: "essam-support",
-            storageBucket: "essam-support.firebasestorage.app",
-            messagingSenderId: "1062222968750",
-            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
-        };
+  const who = document.getElementById("who");
+  const btnLogout = document.getElementById("btnLogout");
+  const btnSend = document.getElementById("btnSend");
+  const phone = document.getElementById("phone");
+  const note = document.getElementById("note");
+  const statusBadge = document.getElementById("statusBadge");
+  const reqInfo = document.getElementById("reqInfo");
+  const offlineText = document.getElementById("offlineText");
+  const btnOffline = document.getElementById("btnOffline");
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const auth = getAuth(app);
-        
-        let userUid = null;
-        let userName = "";
+  const user = await requireAuth("index.html");
+  if(await isAdmin(user.uid)){
+    location.href = "admin.html";
+  }
+  who.textContent = `مرحباً ${user.displayName || user.email || user.uid}`;
 
-        // التحقق من الدخول
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                userUid = user.uid;
-                userName = user.displayName || "عميل مميز";
-                
-                document.getElementById('u-name').innerText = "أهلاً، " + userName;
-                document.getElementById('u-img').src = user.photoURL || "https://ui-avatars.com/api/?name=" + userName;
-            } else {
-                window.location.href = "index.html";
-            }
-        });
+  await initMessaging();
+  wireNotificationButton("#btnEnableNotifs");
 
-        window.submitRequest = function() {
-            const phone = document.getElementById('phone').value;
-            if(!phone) return alert("يرجى كتابة رقم الهاتف");
+  btnLogout.addEventListener("click", async ()=>{
+    await logout();
+    location.href = "index.html";
+  });
 
-            document.getElementById('form-card').classList.add('hidden');
-            document.getElementById('waiting-card').classList.remove('hidden');
+  let currentReqId = localStorage.getItem("clientReqId") || "";
 
-            const newRequestRef = push(ref(db, 'requests'));
-            const reqId = newRequestRef.key;
-            
-            set(newRequestRef, {
-                name: userName + " (Google)",
-                phone: phone,
-                status: 'pending',
-                timestamp: Date.now(),
-                uid: userUid
-            });
-
-            // مراقبة الرد
-            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
-                const status = snapshot.val();
-                if (status === 'accepted') {
-                    // تحويل لغرفة الفيديو
-                    window.location.href = `video.html?room=${reqId}&role=client`;
-                } else if (status === 'rejected') {
-                    alert("نعتذر، لا يمكن الرد حالياً.");
-                    location.reload();
-                }
-            });
-        }
-
-        window.logout = function() {
-            signOut(auth).then(() => window.location.href = "index.html");
-        }
-		window.showClientMsg = function() {
-    document.getElementById('client-actions').classList.add('hidden');
-    document.getElementById('client-msg-form').classList.remove('hidden');
-}
-
-window.sendClientMessage = function() {
-    const content = document.getElementById('c-msg-content').value;
-    if(!content) return alert("اكتب رسالتك");
-
-    // نستخدم بيانات جوجل مباشرة
-    push(ref(db, 'messages'), {
-        name: auth.currentUser.displayName,
-        contact: auth.currentUser.email, // الإيميل تلقائي
-        content: content,
-        type: 'Google User',
-        timestamp: Date.now()
-    }).then(() => {
-        alert("تم الإرسال! سيصلك الرد على إيميلك: " + auth.currentUser.email);
-        location.reload();
+  function watch(id){
+    if(!id) return;
+    statusBadge.textContent = "جارٍ المتابعة…";
+    listenMyRequest(id, (r)=>{
+      if(!r){
+        statusBadge.textContent = "غير موجود";
+        return;
+      }
+      statusBadge.textContent = r.status || "—";
+      reqInfo.innerHTML = `<div class="small">Request ID: <b>${id}</b></div>`;
+      if(r.status === "accepted" && r.roomId && r.roomToken){
+        reqInfo.innerHTML += `<div style="margin-top:10px">
+          <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
+        </div>`;
+      }
+      if(r.status === "rejected"){
+        reqInfo.innerHTML += `<div class="small" style="margin-top:10px; color:#ff9aa5">تم رفض الطلب.</div>`;
+      }
     });
-}
+  }
+  if(currentReqId) watch(currentReqId);
 
-// تعديل جزء الرفض (داخل onValue):
-/*
-else if (status === 'rejected') {
-    document.getElementById('wait-title').innerText = "المهندس غير متاح حالياً";
-    document.getElementById('wait-msg').innerText = "يمكنك ترك رسالة وسنرد عليك عبر البريد الإلكتروني.";
-    document.getElementById('wait-msg').style.color = "#e74c3c";
-    
-    // إظهار النموذج فوراً
-    showClientMsg();
-}
-*/
-    </script>
+  btnSend.addEventListener("click", async ()=>{
+    btnSend.disabled = true;
+    try{
+      const ph = (phone.value||"").trim();
+      const nt = (note.value||"").trim();
+      if(!nt) throw new Error("اكتب وصف المشكلة.");
+      const res = await createRequest({
+        createdByUid: user.uid,
+        createdByType: "client",
+        displayName: user.displayName || "",
+        email: user.email || "",
+        phone: ph,
+        note: nt
+      });
+      currentReqId = res.reqId;
+      localStorage.setItem("clientReqId", currentReqId);
+      toast("تم إرسال الطلب", "انتظر قبول المدير.");
+      watch(currentReqId);
+    }catch(e){
+      console.error(e);
+      toast("تعذّر إرسال الطلب", e?.message || "");
+    }finally{ btnSend.disabled = false; }
+  });
+
+  btnOffline.addEventListener("click", async ()=>{
+    btnOffline.disabled = true;
+    try{
+      if(!currentReqId) throw new Error("أرسل طلباً أولاً.");
+      const t = (offlineText.value||"").trim();
+      if(!t) throw new Error("اكتب الرسالة.");
+      await sendOfflineMessage({
+        reqId: currentReqId,
+        fromUid: user.uid,
+        fromName: user.displayName || user.email || "client",
+        text: t
+      });
+      offlineText.value = "";
+      toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");
+    }catch(e){
+      console.error(e);
+      toast("تعذّر الإرسال", e?.message || "");
+    }finally{ btnOffline.disabled = false; }
+  });
+</script>
 </body>
 </html>
-

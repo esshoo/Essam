@@ -1,0 +1,95 @@
+:root{
+  --bg:#0b1220;
+  --card:#101a2f;
+  --muted:#8aa0c7;
+  --text:#e8f0ff;
+  --accent:#5aa8ff;
+  --danger:#ff5a6b;
+  --ok:#2ee59d;
+  --line:rgba(255,255,255,.10);
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+  --radius: 18px;
+  --font: "Tajawal", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font-family:var(--font); color:var(--text); background: radial-gradient(1200px 700px at 20% 0%, rgba(90,168,255,.18), transparent 50%),
+  radial-gradient(900px 600px at 100% 20%, rgba(46,229,157,.10), transparent 55%),
+  var(--bg);
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+.container{max-width:1100px; margin:0 auto; padding:24px}
+.header{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px}
+.brand{display:flex; align-items:center; gap:10px}
+.logo{
+  width:40px; height:40px; border-radius:14px;
+  background: linear-gradient(135deg, rgba(90,168,255,.9), rgba(46,229,157,.75));
+  box-shadow: var(--shadow);
+}
+.h1{font-size:22px; margin:0}
+.small{color:var(--muted); font-size:13px}
+.grid{display:grid; grid-template-columns: 1fr; gap:16px}
+@media(min-width:900px){ .grid{grid-template-columns: 1fr 1fr} }
+.card{
+  background: rgba(16,26,47,.92);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding:18px;
+}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.input{
+  width:100%; padding:12px 12px; border-radius:14px;
+  border:1px solid var(--line); background: rgba(8,14,26,.8);
+  color:var(--text); outline:none;
+}
+.input:focus{border-color: rgba(90,168,255,.7)}
+.label{font-size:13px; color:var(--muted); margin-bottom:6px}
+.btn{
+  padding:11px 14px; border-radius:14px; border:1px solid var(--line);
+  background: rgba(90,168,255,.15); color:var(--text);
+  cursor:pointer; transition:.18s transform, .18s background;
+}
+.btn:hover{transform: translateY(-1px); background: rgba(90,168,255,.22)}
+.btn:disabled{opacity:.55; cursor:not-allowed; transform:none}
+.btn.primary{background: rgba(90,168,255,.25); border-color: rgba(90,168,255,.35)}
+.btn.danger{background: rgba(255,90,107,.16); border-color: rgba(255,90,107,.35)}
+.btn.ok{background: rgba(46,229,157,.16); border-color: rgba(46,229,157,.35)}
+.badge{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px; border:1px solid var(--line);
+  color:var(--muted); font-size:12px; background: rgba(8,14,26,.6);
+}
+hr{border:none; border-top:1px solid var(--line); margin:14px 0}
+.list{display:flex; flex-direction:column; gap:10px}
+.item{
+  display:flex; justify-content:space-between; gap:12px; align-items:flex-start;
+  padding:12px; border:1px solid var(--line); border-radius:16px;
+  background: rgba(8,14,26,.55);
+}
+.item .meta{display:flex; flex-direction:column; gap:6px}
+.item .title{font-weight:700}
+.item .sub{font-size:12px; color:var(--muted)}
+.toast-wrap{
+  position:fixed; left:16px; bottom:16px; z-index:9999;
+  display:flex; flex-direction:column; gap:10px;
+}
+.toast{
+  min-width:260px; max-width:360px;
+  padding:12px 12px; border-radius:16px; border:1px solid var(--line);
+  background: rgba(16,26,47,.96); box-shadow: var(--shadow);
+}
+.toast .t{font-weight:700; margin-bottom:4px}
+.toast .b{font-size:13px; color:var(--muted)}
+.video-grid{display:grid; grid-template-columns:1fr; gap:14px}
+@media(min-width:900px){ .video-grid{grid-template-columns:1.2fr .8fr} }
+.video-box{border:1px solid var(--line); border-radius:16px; overflow:hidden; background:rgba(8,14,26,.55)}
+video{width:100%; height:auto; display:block; background:black}
+.chat{display:flex; flex-direction:column; gap:10px; height:520px}
+.chatlog{flex:1; overflow:auto; border:1px solid var(--line); border-radius:16px; padding:10px; background:rgba(8,14,26,.55)}
+.msg{padding:8px 10px; border-radius:14px; border:1px solid var(--line); margin:6px 0; background:rgba(16,26,47,.7)}
+.msg.me{border-color: rgba(90,168,255,.35)}
+.msg .who{font-size:11px; color:var(--muted); margin-bottom:4px}
+.footer{margin-top:18px; color:var(--muted); font-size:12px}
