@@ -5,13 +5,13 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js
 importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_AUTH_DOMAIN",
-  databaseURL: "PASTE_DATABASE_URL",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_STORAGE_BUCKET",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
+  apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+  authDomain: "essam-support.firebaseapp.com",
+  databaseURL: "https://essam-support-default-rtdb.firebaseio.com",
+  projectId: "essam-support",
+  storageBucket: "essam-support.firebasestorage.app",
+  messagingSenderId: "1062222968750",
+  appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
 };
 
 firebase.initializeApp(firebaseConfig);
