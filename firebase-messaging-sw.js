@@ -1,8 +1,8 @@
 /* Firebase Messaging Service Worker (FCM)
    IMPORTANT: ضع نفس firebaseConfig المستخدمة في assets/app-config.js هنا أيضاً.
 */
-importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js");
 
 const firebaseConfig = {
   apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",

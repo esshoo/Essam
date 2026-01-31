@@ -29,8 +29,10 @@ export async function isAdmin(uid, email = "") {
   if (!uid) return false;
 
   try {
-    const snap = await get(ref(db, `admins/${uid}`));
-    return snap.exists() && snap.val() === true;
+const snap = await get(ref(db, `admins/${uid}`));
+const byUid = snap.exists() && snap.val() === true;
+const byEmail = ADMIN_EMAILS.includes(normEmail(email));
+return byUid || byEmail;
   } catch (err) {
     // If Rules deny reading /admins/{uid}, don't crash routing
     if (isPermissionDenied(err)) {
