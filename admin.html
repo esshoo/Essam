@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css" />
 </head>
+
 <body>
 <div class="container">
   <div class="header">
@@ -31,24 +32,24 @@
   <div class="grid">
     <div class="card">
       <div class="title">الطلبات الجديدة (Pending)</div>
-      <div class="small">اضغط قبول لإنشاء غرفة وإرسال رابط للمستخدم.</div>
+      <div class="small">تظهر تلقائيًا. اضغط قبول لإنشاء غرفة.</div>
       <hr/>
       <div class="list" id="reqList"></div>
     </div>
 
     <div class="card">
       <div class="title">رسائل أوفلاين</div>
-      <div class="small">اختر طلباً لمشاهدة رسائله (تظهر تلقائياً).</div>
+      <div class="small">اضغط "رسائل" بجوار أي طلب لعرض رسائله تلقائيًا.</div>
       <hr/>
       <div class="row">
-        <input class="input" id="reqIdForMsgs" placeholder="اكتب Request ID لعرض الرسائل" />
+        <input class="input" id="reqIdForMsgs" placeholder="Request ID" />
         <button class="btn" id="btnLoadMsgs">عرض</button>
       </div>
       <div class="chatlog" id="msgsBox" style="height:360px; margin-top:12px"></div>
     </div>
   </div>
 
-  <div class="footer">نصيحة: فعّل الإشعارات لتصلك تنبيهات عند وصول طلبات/رسائل جديدة.</div>
+  <div class="footer">لو واجهت مشكلة اتصال داخل الغرفة: تأكد من Rules الخاصة بـ rooms/peerIds.</div>
 </div>
 
 <script type="module">
@@ -60,16 +61,16 @@
   const who = document.getElementById("who");
   const reqList = document.getElementById("reqList");
   const btnLogout = document.getElementById("btnLogout");
+
   const reqIdForMsgs = document.getElementById("reqIdForMsgs");
   const btnLoadMsgs = document.getElementById("btnLoadMsgs");
   const msgsBox = document.getElementById("msgsBox");
 
   let unsubMsgs = null;
 
-  // ✅ لا Redirect سريع: requireAuth الآن ينتظر auth init
   const user = await requireAuth("index.html");
 
-  // ✅ مهم: ابعت الإيميل
+  // ✅ مهم: مرر الإيميل
   const admin = await isAdmin(user.uid, user.email || "");
   if(!admin){
     toast("غير مصرح", "هذا الحساب ليس مديراً.");
@@ -86,31 +87,67 @@
     location.replace("index.html");
   });
 
+  function renderMsgs(reqId){
+    if(!reqId) return;
+    reqIdForMsgs.value = reqId;
+
+    msgsBox.innerHTML = "";
+    if(unsubMsgs) try{ unsubMsgs(); }catch{}
+    unsubMsgs = listenOfflineMessagesForRequest(reqId, (msgs)=>{
+      msgsBox.innerHTML = msgs.map(m=> `
+        <div class="msg">
+          <div class="who">${m.fromName || m.fromUid || "unknown"} • ${new Date(m.createdAt||Date.now()).toLocaleString()}</div>
+          <div>${String(m.text||"").replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>
+        </div>
+      `).join("") || '<div class="small">لا توجد رسائل.</div>';
+      msgsBox.scrollTop = msgsBox.scrollHeight;
+    });
+  }
+
+  btnLoadMsgs.addEventListener("click", ()=>{
+    const id = (reqIdForMsgs.value||"").trim();
+    if(!id) return;
+    renderMsgs(id);
+  });
+
   function render(items){
     reqList.innerHTML = "";
     if(!items.length){
       reqList.innerHTML = '<div class="small">لا توجد طلبات معلّقة الآن.</div>';
       return;
     }
+
     for(const r of items){
+      const name = (r.displayName || r.email || r.createdByUid || "—");
+      const hasOffline = (r.lastOfflineAt && r.lastOfflineAt > 0);
+
       const el = document.createElement("div");
       el.className="item";
       el.innerHTML = `
         <div class="meta">
           <div class="title">طلب #${r.id}</div>
-          <div class="sub">${r.createdByType} • ${r.displayName || r.email || "—"} • ${r.phone || "—"}</div>
+          <div class="sub">${r.createdByType} • ${name} • ${r.phone || "—"}</div>
           <div class="sub">${(r.note||"").slice(0,120)}</div>
+          ${hasOffline ? `<div class="sub" style="color:#ffd18b">📩 أوفلاين: ${r.lastOfflineFrom || ""} — ${(r.lastOfflineText||"")}</div>` : ``}
         </div>
         <div class="row">
+          <button class="btn" data-act="msgs">رسائل</button>
           <button class="btn ok" data-act="accept">قبول</button>
           <button class="btn danger" data-act="reject">رفض</button>
         </div>
       `;
 
+      el.querySelector('[data-act="msgs"]').addEventListener("click", ()=>{
+        renderMsgs(r.id);
+      });
+
       el.querySelector('[data-act="accept"]').addEventListener("click", async ()=>{
         try{
-          await acceptRequest({ reqId: r.id, adminUid: user.uid });
-          toast("تم القبول", "تم إنشاء غرفة للمستخدم.");
+          const { roomId, token } = await acceptRequest({ reqId: r.id, adminUid: user.uid });
+
+          toast("تم القبول", "سيتم فتح غرفة التواصل للمدير الآن.");
+          // ✅ افتح الغرفة للأدمن
+          window.open(`video.html?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`, "_blank");
         }catch(e){
           console.error(e);
           toast("فشل القبول", e?.message || "");
@@ -132,25 +169,6 @@
   }
 
   listenPendingRequests(render);
-
-  btnLoadMsgs.addEventListener("click", ()=>{
-    const id = (reqIdForMsgs.value||"").trim();
-    if(!id) return;
-
-    msgsBox.innerHTML = "";
-    if(unsubMsgs) try{ unsubMsgs(); }catch{}
-
-    unsubMsgs = listenOfflineMessagesForRequest(id, (msgs)=>{
-      msgsBox.innerHTML = msgs.map(m=> `
-        <div class="msg">
-          <div class="who">${m.fromName || m.fromUid || "unknown"} • ${new Date(m.createdAt||Date.now()).toLocaleString()}</div>
-          <div>${String(m.text||"").replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>
-        </div>
-      `).join("") || '<div class="small">لا توجد رسائل.</div>';
-
-      msgsBox.scrollTop = msgsBox.scrollHeight;
-    });
-  });
 </script>
 </body>
 </html>

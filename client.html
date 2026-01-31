@@ -125,7 +125,7 @@
       const res = await createRequest({
         createdByUid: user.uid,
         createdByType: "client",
-        displayName: user.displayName || "",
+        displayName: user.displayName || user.email || "client",
         email: user.email || "",
         phone: ph,
         note: nt
