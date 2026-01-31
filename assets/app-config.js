@@ -12,7 +12,7 @@ export const FIREBASE_CONFIG = {
 };
 
 // VAPID key من Cloud Messaging -> Web Push certificates
-export const FCM_VAPID_KEY = "LrjcKQ-uskkxhEXsbZ3PMN63O1_kZcyrWDZVW5CYII8";
+export const FCM_VAPID_KEY = "BM_9wA4K71mBVFFcjijVxxW4piChUT1wxZC77_nBu3J-qq-AXtNxLImt5zyghkYjLpSfXpamiaXsuyG-ZO7I-t0";
 
 // إعدادات عامة
 export const APP = {
