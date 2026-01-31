@@ -44,7 +44,6 @@ export async function requireAuth(redirectTo = "index.html", waitMs = 1200) {
     const unsub = onAuthStateChanged(auth, (u) => {
       if (done) return;
 
-      // ✅ لو المستخدم ظهر نحلّ المشكلة فوراً
       if (u) {
         done = true;
         if (timer) clearTimeout(timer);
@@ -53,7 +52,6 @@ export async function requireAuth(redirectTo = "index.html", waitMs = 1200) {
         return;
       }
 
-      // ✅ لو null: استنى شوية بدل redirect فوري (عشان مايحصلش loop)
       if (!timer) {
         timer = setTimeout(() => {
           if (done) return;

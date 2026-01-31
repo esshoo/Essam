@@ -37,9 +37,9 @@ const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// ✅ تثبيت الجلسة (يمنع تذبذب الحالة بين null/user)
+// ✅ تثبيت الجلسة لتجنب تذبذب auth (null ثم user ثم null...)
 const authReady = setPersistence(auth, browserLocalPersistence).catch(() => {
-  // لو المتصفح منعها لأي سبب، هنكمل بدون ما نكسر التطبيق
+  // لو المتصفح منعها لأي سبب، لا نكسر التطبيق
 });
 
 export {
