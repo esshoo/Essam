@@ -1,13 +1,67 @@
-import { db, ref, get, set, push, update, onValue, query, orderByChild, equalTo } from "./firebase.js";
+import {
+  db, ref, get, set, push, update,
+  onValue, query, orderByChild, equalTo
+} from "./firebase.js";
 import { randomToken } from "./ui.js";
 
-export async function isAdmin(uid){
-  if(!uid) return false;
-  const snap = await get(ref(db, `admins/${uid}`));
-  return snap.exists() && snap.val() === true;
+/**
+ * Admin allowlist by email (frontend fallback only)
+ * IMPORTANT: This is NOT a security boundary. Real security must be enforced by RTDB Rules + /admins/{uid}=true.
+ */
+const ADMIN_EMAILS = ["esshoo@gmail.com"];
+
+/** Normalize email for comparisons */
+function normEmail(email) {
+  return (email || "").trim().toLowerCase();
 }
 
-export async function createRequest({ createdByUid, createdByType, displayName, email, phone, note }){
+function isPermissionDenied(err) {
+  const msg = (err && err.message) ? err.message : "";
+  // Firebase RTDB throws Error("Permission denied") commonly
+  return /permission denied/i.test(msg);
+}
+
+/**
+ * Check admin by uid in DB: admins/{uid} === true
+ * With safe fallback: if admins node read is denied by Rules, fallback to email allowlist (if provided).
+ */
+export async function isAdmin(uid, email = "") {
+  if (!uid) return false;
+
+  try {
+    const snap = await get(ref(db, `admins/${uid}`));
+    return snap.exists() && snap.val() === true;
+  } catch (err) {
+    // If Rules deny reading /admins/{uid}, don't crash routing
+    if (isPermissionDenied(err)) {
+      // Fallback: email allowlist (for UX only)
+      return ADMIN_EMAILS.includes(normEmail(email));
+    }
+    // For other errors, rethrow to surface real problems
+    throw err;
+  }
+}
+
+/**
+ * Safer helper when you already have auth user object.
+ * user.email may be null for anonymous.
+ */
+export async function isAdminUser(user) {
+  if (!user) return false;
+  return isAdmin(user.uid, user.email || "");
+}
+
+export async function createRequest({
+  createdByUid,
+  createdByType,
+  displayName,
+  email,
+  phone,
+  note
+}) {
+  if (!createdByUid) throw new Error("createRequest: createdByUid is required");
+  if (!createdByType) throw new Error("createRequest: createdByType is required");
+
   const reqRef = push(ref(db, "requests"));
   const payload = {
     createdByUid,
@@ -26,23 +80,35 @@ export async function createRequest({ createdByUid, createdByType, displayName, 
   return { reqId: reqRef.key };
 }
 
-export function listenMyRequest(reqId, cb){
-  return onValue(ref(db, `requests/${reqId}`), (snap)=> cb(snap.exists()? snap.val(): null));
+export function listenMyRequest(reqId, cb) {
+  if (!reqId) throw new Error("listenMyRequest: reqId is required");
+  return onValue(ref(db, `requests/${reqId}`), (snap) => cb(snap.exists() ? snap.val() : null));
 }
 
-export function listenPendingRequests(cb){
+export function listenPendingRequests(cb) {
   const q = query(ref(db, "requests"), orderByChild("status"), equalTo("pending"));
-  return onValue(q, (snap)=>{
+  return onValue(q, (snap) => {
     const out = [];
-    snap.forEach(ch => out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0));
+    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
+    out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     cb(out);
   });
 }
 
-export async function acceptRequest({ reqId, adminUid }){
+export async function acceptRequest({ reqId, adminUid }) {
+  if (!reqId) throw new Error("acceptRequest: reqId is required");
+  if (!adminUid) throw new Error("acceptRequest: adminUid is required");
+
+  // Use reqId as roomId to keep mapping simple
   const roomId = reqId;
   const token = randomToken(36);
+
+  // Read request first (so we can add creator participant reliably)
+  const reqSnap = await get(ref(db, `requests/${reqId}`));
+  if (!reqSnap.exists()) throw new Error(`acceptRequest: request not found (${reqId})`);
+
+  const r = reqSnap.val();
+
   const updates = {};
   updates[`requests/${reqId}/status`] = "accepted";
   updates[`requests/${reqId}/assignedAdminUid`] = adminUid;
@@ -54,21 +120,25 @@ export async function acceptRequest({ reqId, adminUid }){
   updates[`rooms/${roomId}/createdAt`] = Date.now();
   updates[`rooms/${roomId}/participants/${adminUid}`] = true;
 
-  const reqSnap = await get(ref(db, `requests/${reqId}`));
-  if(reqSnap.exists()){
-    const r = reqSnap.val();
-    if(r.createdByUid) updates[`rooms/${roomId}/participants/${r.createdByUid}`] = true;
+  if (r && r.createdByUid) {
+    updates[`rooms/${roomId}/participants/${r.createdByUid}`] = true;
   }
 
   await update(ref(db), updates);
   return { roomId, token };
 }
 
-export async function rejectRequest({ reqId, adminUid }){
-  await update(ref(db, `requests/${reqId}`), { status: "rejected", assignedAdminUid: adminUid || "" });
+export async function rejectRequest({ reqId, adminUid }) {
+  if (!reqId) throw new Error("rejectRequest: reqId is required");
+  await update(ref(db, `requests/${reqId}`), {
+    status: "rejected",
+    assignedAdminUid: adminUid || ""
+  });
 }
 
-export async function sendOfflineMessage({ reqId, fromUid, fromName, text }){
+export async function sendOfflineMessage({ reqId, fromUid, fromName, text }) {
+  if (!reqId) throw new Error("sendOfflineMessage: reqId is required");
+
   const mref = push(ref(db, `offlineMessages/${reqId}`));
   await set(mref, {
     fromUid: fromUid || "",
@@ -78,32 +148,46 @@ export async function sendOfflineMessage({ reqId, fromUid, fromName, text }){
   });
 }
 
-export function listenOfflineMessagesForRequest(reqId, cb){
-  return onValue(ref(db, `offlineMessages/${reqId}`), (snap)=>{
-    const out=[];
-    snap.forEach(ch=> out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a,b)=> (a.createdAt||0)-(b.createdAt||0));
+export function listenOfflineMessagesForRequest(reqId, cb) {
+  if (!reqId) throw new Error("listenOfflineMessagesForRequest: reqId is required");
+  return onValue(ref(db, `offlineMessages/${reqId}`), (snap) => {
+    const out = [];
+    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
+    out.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     cb(out);
   });
 }
 
-export async function saveFcmToken(uid, token){
-  const safe = token.replace(/[^a-zA-Z0-9:_-]/g,"_");
+export async function saveFcmToken(uid, token) {
+  if (!uid) throw new Error("saveFcmToken: uid is required");
+  if (!token) return;
+
+  // keep key safe for RTDB paths
+  const safe = token.replace(/[^a-zA-Z0-9:_-]/g, "_");
   await set(ref(db, `fcmTokens/${uid}/${safe}`), true);
 }
 
-export async function setMyPeerId(roomId, uid, peerId){
+export async function setMyPeerId(roomId, uid, peerId) {
+  if (!roomId) throw new Error("setMyPeerId: roomId is required");
+  if (!uid) throw new Error("setMyPeerId: uid is required");
+  if (!peerId) throw new Error("setMyPeerId: peerId is required");
+
   await set(ref(db, `rooms/${roomId}/peerIds/${uid}`), peerId);
 }
-export function listenPeerIds(roomId, cb){
-  return onValue(ref(db, `rooms/${roomId}/peerIds`), (snap)=> cb(snap.exists()? snap.val(): {}));
+
+export function listenPeerIds(roomId, cb) {
+  if (!roomId) throw new Error("listenPeerIds: roomId is required");
+  return onValue(ref(db, `rooms/${roomId}/peerIds`), (snap) => cb(snap.exists() ? snap.val() : {}));
 }
 
-export async function getRequest(reqId){
+export async function getRequest(reqId) {
+  if (!reqId) throw new Error("getRequest: reqId is required");
   const s = await get(ref(db, `requests/${reqId}`));
-  return s.exists()? s.val(): null;
+  return s.exists() ? s.val() : null;
 }
-export async function getRoom(roomId){
+
+export async function getRoom(roomId) {
+  if (!roomId) throw new Error("getRoom: roomId is required");
   const s = await get(ref(db, `rooms/${roomId}`));
-  return s.exists()? s.val(): null;
+  return s.exists() ? s.val() : null;
 }
