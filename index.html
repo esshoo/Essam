@@ -55,7 +55,8 @@
   const btnGuest = document.getElementById("btnGuest");
 
   async function route(user){
-    const admin = await isAdmin(user.uid);
+    // ✅ مهم: ابعت الإيميل عشان fallback يشتغل (والـ UID allowlist كمان موجود)
+    const admin = await isAdmin(user.uid, user.email || "");
     if(admin) location.href = "admin.html";
     else{
       if(user.isAnonymous) location.href = "guest.html";

@@ -5,48 +5,50 @@ import {
 import { randomToken } from "./ui.js";
 
 /**
- * Admin allowlist by email (frontend fallback only)
+ * Admin allowlists (frontend fallback only)
  * IMPORTANT: This is NOT a security boundary. Real security must be enforced by RTDB Rules + /admins/{uid}=true.
  */
 const ADMIN_EMAILS = ["esshoo@gmail.com"];
+const ADMIN_UIDS = ["5pJZukLwT8MSfTg73rARyHDnRi62"]; // ✅ UID اللي بعته المستخدم
 
-/** Normalize email for comparisons */
 function normEmail(email) {
   return (email || "").trim().toLowerCase();
 }
 
 function isPermissionDenied(err) {
   const msg = (err && err.message) ? err.message : "";
-  // Firebase RTDB throws Error("Permission denied") commonly
   return /permission denied/i.test(msg);
 }
 
 /**
- * Check admin by uid in DB: admins/{uid} === true
- * With safe fallback: if admins node read is denied by Rules, fallback to email allowlist (if provided).
+ * Admin check order:
+ * 1) UID allowlist (fast + reliable)
+ * 2) Email allowlist (Google users only)
+ * 3) RTDB admins/{uid} === true (preferred for real security when Rules are set)
  */
 export async function isAdmin(uid, email = "") {
   if (!uid) return false;
 
+  // 1) UID allowlist
+  if (ADMIN_UIDS.includes(uid)) return true;
+
+  // 2) Email allowlist
+  const byEmail = ADMIN_EMAILS.includes(normEmail(email));
+  if (byEmail) return true;
+
+  // 3) DB check (best when you configure /admins/{uid}=true + Rules)
   try {
-const snap = await get(ref(db, `admins/${uid}`));
-const byUid = snap.exists() && snap.val() === true;
-const byEmail = ADMIN_EMAILS.includes(normEmail(email));
-return byUid || byEmail;
+    const snap = await get(ref(db, `admins/${uid}`));
+    return snap.exists() && snap.val() === true;
   } catch (err) {
-    // If Rules deny reading /admins/{uid}, don't crash routing
-    if (isPermissionDenied(err)) {
-      // Fallback: email allowlist (for UX only)
-      return ADMIN_EMAILS.includes(normEmail(email));
-    }
-    // For other errors, rethrow to surface real problems
+    // If Rules deny reading admins/{uid}, don't crash routing
+    if (isPermissionDenied(err)) return false;
     throw err;
   }
 }
 
 /**
- * Safer helper when you already have auth user object.
- * user.email may be null for anonymous.
+ * Convenience helper
  */
 export async function isAdminUser(user) {
   if (!user) return false;
@@ -101,11 +103,9 @@ export async function acceptRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("acceptRequest: reqId is required");
   if (!adminUid) throw new Error("acceptRequest: adminUid is required");
 
-  // Use reqId as roomId to keep mapping simple
   const roomId = reqId;
   const token = randomToken(36);
 
-  // Read request first (so we can add creator participant reliably)
   const reqSnap = await get(ref(db, `requests/${reqId}`));
   if (!reqSnap.exists()) throw new Error(`acceptRequest: request not found (${reqId})`);
 
@@ -164,7 +164,6 @@ export async function saveFcmToken(uid, token) {
   if (!uid) throw new Error("saveFcmToken: uid is required");
   if (!token) return;
 
-  // keep key safe for RTDB paths
   const safe = token.replace(/[^a-zA-Z0-9:_-]/g, "_");
   await set(ref(db, `fcmTokens/${uid}/${safe}`), true);
 }

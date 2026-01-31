@@ -1,8 +1,8 @@
 {
   "name": "Essam Support",
   "short_name": "Support",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "/Essam/",
+  "scope": "/Essam/"
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#0b1220",
