@@ -18,19 +18,36 @@ firebase.initializeApp(firebaseConfig);
 
 const messaging = firebase.messaging();
 
+/** Resolve base path from SW scope, e.g. "/Essam/" on GitHub Pages */
+function getBasePath() {
+  // self.registration.scope example: "https://esshoo.github.io/Essam/"
+  const u = new URL(self.registration.scope);
+  return u.pathname.endsWith("/") ? u.pathname : (u.pathname + "/");
+}
+
 messaging.onBackgroundMessage((payload) => {
-  const title = (payload && payload.notification && payload.notification.title) || "إشعار";
+  const BASE = getBasePath();
+
+  const title =
+    (payload && payload.notification && payload.notification.title) || "إشعار";
+
   const options = {
     body: (payload && payload.notification && payload.notification.body) || "",
-    icon: "./icons/icon-192.png",
-    badge: "./icons/icon-192.png",
+    icon: BASE + "icons/icon-192.png",
+    badge: BASE + "icons/icon-192.png",
     data: payload?.data || {}
   };
+
   self.registration.showNotification(title, options);
 });
 
-self.addEventListener("notificationclick", (event)=>{
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || "./index.html";
-  event.waitUntil(clients.openWindow(url));
+  const BASE = getBasePath();
+
+  // url may be relative or absolute
+  const raw = event.notification?.data?.url || (BASE + "index.html");
+  const target = new URL(raw, self.registration.scope).toString();
+
+  event.waitUntil(clients.openWindow(target));
 });

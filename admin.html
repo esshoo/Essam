@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<title>Essam Support • Admin</title>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#0b1220" />
-<link rel="icon" href="icons/icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/styles.css" />
+  <title>Essam Support • Admin</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
 <div class="container">
@@ -66,12 +66,16 @@
 
   let unsubMsgs = null;
 
+  // ✅ لا Redirect سريع: requireAuth الآن ينتظر auth init
   const user = await requireAuth("index.html");
-  const admin = await isAdmin(user.uid);
+
+  // ✅ مهم: ابعت الإيميل
+  const admin = await isAdmin(user.uid, user.email || "");
   if(!admin){
     toast("غير مصرح", "هذا الحساب ليس مديراً.");
-    location.href = "index.html";
+    location.replace("index.html");
   }
+
   who.textContent = `مرحباً ${user.displayName || user.email || user.uid}`;
 
   await initMessaging();
@@ -79,7 +83,7 @@
 
   btnLogout.addEventListener("click", async ()=>{
     await logout();
-    location.href = "index.html";
+    location.replace("index.html");
   });
 
   function render(items){
@@ -102,6 +106,7 @@
           <button class="btn danger" data-act="reject">رفض</button>
         </div>
       `;
+
       el.querySelector('[data-act="accept"]').addEventListener("click", async ()=>{
         try{
           await acceptRequest({ reqId: r.id, adminUid: user.uid });
@@ -111,6 +116,7 @@
           toast("فشل القبول", e?.message || "");
         }
       });
+
       el.querySelector('[data-act="reject"]').addEventListener("click", async ()=>{
         try{
           await rejectRequest({ reqId: r.id, adminUid: user.uid });
@@ -120,6 +126,7 @@
           toast("فشل الرفض", e?.message || "");
         }
       });
+
       reqList.appendChild(el);
     }
   }
@@ -129,8 +136,10 @@
   btnLoadMsgs.addEventListener("click", ()=>{
     const id = (reqIdForMsgs.value||"").trim();
     if(!id) return;
+
     msgsBox.innerHTML = "";
     if(unsubMsgs) try{ unsubMsgs(); }catch{}
+
     unsubMsgs = listenOfflineMessagesForRequest(id, (msgs)=>{
       msgsBox.innerHTML = msgs.map(m=> `
         <div class="msg">
@@ -138,6 +147,7 @@
           <div>${String(m.text||"").replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>
         </div>
       `).join("") || '<div class="small">لا توجد رسائل.</div>';
+
       msgsBox.scrollTop = msgsBox.scrollHeight;
     });
   });

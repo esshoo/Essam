@@ -77,8 +77,13 @@
   const btnOffline = document.getElementById("btnOffline");
 
   const user = await requireAuth("index.html");
-  if(await isAdmin(user.uid)) location.href="admin.html";
-  if(!user.isAnonymous) location.href="client.html";
+
+  // ✅ لو أدمن: تحويل للوحة المدير
+  if (await isAdmin(user.uid, user.email || "")) location.replace("admin.html");
+
+  // ✅ لو مش anonymous يبقى عميل
+  if (!user.isAnonymous) location.replace("client.html");
+
   who.textContent = `Guest UID: ${user.uid}`;
 
   await initMessaging();
@@ -86,11 +91,12 @@
 
   btnLogout.addEventListener("click", async ()=>{
     await logout();
-    location.href = "index.html";
+    location.replace("index.html");
   });
+
   btnSwitch.addEventListener("click", async ()=>{
     await logout();
-    location.href = "index.html";
+    location.replace("index.html");
   });
 
   let currentReqId = localStorage.getItem("guestReqId") || "";

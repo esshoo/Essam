@@ -76,9 +76,12 @@
   const btnOffline = document.getElementById("btnOffline");
 
   const user = await requireAuth("index.html");
-  if(await isAdmin(user.uid)){
-    location.href = "admin.html";
+
+  // ✅ لو أدمن: حوله للوحة المدير (بايميل + uid)
+  if (await isAdmin(user.uid, user.email || "")) {
+    location.replace("admin.html");
   }
+
   who.textContent = `مرحباً ${user.displayName || user.email || user.uid}`;
 
   await initMessaging();
@@ -86,7 +89,7 @@
 
   btnLogout.addEventListener("click", async ()=>{
     await logout();
-    location.href = "index.html";
+    location.replace("index.html");
   });
 
   let currentReqId = localStorage.getItem("clientReqId") || "";

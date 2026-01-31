@@ -1,16 +1,16 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<title>Essam Support • Login</title>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#0b1220" />
-<link rel="icon" href="icons/icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/styles.css" />
+  <title>Essam Support • Login</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
 </head>
 <body>
 <div class="container">
@@ -47,25 +47,33 @@
 </div>
 
 <script type="module">
-  import { loginGoogle, loginGuest, onUser } from "./assets/auth.js";
+  import { loginGoogle, loginGuest } from "./assets/auth.js";
+  import { auth, onAuthStateChanged, authReady } from "./assets/firebase.js";
   import { isAdmin } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
 
   const btnGoogle = document.getElementById("btnGoogle");
   const btnGuest = document.getElementById("btnGuest");
 
+  let routed = false;
+
   async function route(user){
-    // ✅ مهم: ابعت الإيميل عشان fallback يشتغل (والـ UID allowlist كمان موجود)
+    if (routed) return;
+    if (!user) return;
+    routed = true;
+
     const admin = await isAdmin(user.uid, user.email || "");
-    if(admin) location.href = "admin.html";
+    if(admin) location.replace("admin.html");
     else{
-      if(user.isAnonymous) location.href = "guest.html";
-      else location.href = "client.html";
+      if(user.isAnonymous) location.replace("guest.html");
+      else location.replace("client.html");
     }
   }
 
-  onUser(async (u)=>{
-    if(u) route(u);
+  // ✅ انتظر persistence ثم اشتغل على auth state
+  await authReady;
+  onAuthStateChanged(auth, (u)=>{
+    route(u);
   });
 
   btnGoogle.addEventListener("click", async ()=>{

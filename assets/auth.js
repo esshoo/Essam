@@ -1,32 +1,67 @@
-import { auth, GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from "./firebase.js";
+import {
+  auth,
+  authReady,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInAnonymously,
+  signOut,
+  onAuthStateChanged
+} from "./firebase.js";
 
-export async function loginGoogle(){
+export async function loginGoogle() {
+  await authReady;
   const provider = new GoogleAuthProvider();
   const res = await signInWithPopup(auth, provider);
   return res.user;
 }
 
-export async function loginGuest(){
+export async function loginGuest() {
+  await authReady;
   const res = await signInAnonymously(auth);
   return res.user;
 }
 
-export async function logout(){
+export async function logout() {
+  await authReady;
   await signOut(auth);
 }
 
-export function onUser(cb){
+export function onUser(cb) {
   return onAuthStateChanged(auth, cb);
 }
 
-export function requireAuth(redirectTo="index.html"){
-  return new Promise((resolve)=>{
-    onAuthStateChanged(auth, (u)=>{
-      if(!u){
-        location.href = redirectTo;
+/**
+ * ينتظر تهيئة Auth ثم يرجع المستخدم.
+ * لو لم يوجد مستخدم بعد مهلة قصيرة، يعمل redirect مرة واحدة.
+ */
+export async function requireAuth(redirectTo = "index.html", waitMs = 1200) {
+  await authReady;
+
+  return new Promise((resolve) => {
+    let done = false;
+    let timer = null;
+
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (done) return;
+
+      // ✅ لو المستخدم ظهر نحلّ المشكلة فوراً
+      if (u) {
+        done = true;
+        if (timer) clearTimeout(timer);
+        unsub();
+        resolve(u);
         return;
       }
-      resolve(u);
+
+      // ✅ لو null: استنى شوية بدل redirect فوري (عشان مايحصلش loop)
+      if (!timer) {
+        timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          unsub();
+          location.replace(redirectTo);
+        }, waitMs);
+      }
     });
   });
 }
