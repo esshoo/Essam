@@ -71,9 +71,18 @@
       }
     },
     "bans": {
-      ".read": "auth != null && auth.token.email == 'esshoo@gmail.com'",
       "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
         ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'"
+      }
+    },
+    "userState": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
+        ".write": "auth != null && auth.uid === $uid",
+        "activeRequestId": {
+          ".validate": "newData.isString() || newData.val() === '' || newData.val() === null"
+        }
       }
     }
   }

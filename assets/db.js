@@ -91,6 +91,18 @@ export async function isBanned(uid){
   return s.exists();
 }
 
+
+export async function getActiveRequestId(uid){
+  if(!uid) return "";
+  const s = await get(ref(db, `userState/${uid}/activeRequestId`));
+  return s.exists() ? (s.val() || "") : "";
+}
+
+export async function setActiveRequestId(uid, reqId){
+  if(!uid) return;
+  await set(ref(db, `userState/${uid}/activeRequestId`), reqId || "");
+}
+
 export async function createRequest({
   createdByUid,
   createdByType,
@@ -102,11 +114,29 @@ export async function createRequest({
   if (!createdByUid) throw new Error("createRequest: createdByUid is required");
   if (!createdByType) throw new Error("createRequest: createdByType is required");
 
+  // Block banned users (admin controls /bans)
+  if(await isBanned(createdByUid)){
+    throw new Error("تم حظرك من إرسال طلبات.");
+  }
+
+  // Prevent multiple pending/active requests for same user
+  const activeId = await getActiveRequestId(createdByUid);
+  if(activeId){
+    const s = await get(ref(db, `requests/${activeId}`));
+    if(s.exists()){
+      const r = s.val();
+      const st = (r.status || "").toLowerCase();
+      if(st === "pending" || st === "accepted"){
+        return { reqId: activeId, reused: true };
+      }
+    }
+  }
+
   const reqRef = push(ref(db, "requests"));
   const payload = {
     createdByUid,
     createdByType,
-    displayName: displayName || (email || "") || "",   // ✅ أفضل من فاضي
+    displayName: displayName || (email || "") || "",
     email: email || "",
     phone: phone || "",
     note: note || "",
@@ -115,16 +145,16 @@ export async function createRequest({
     roomId: "",
     roomToken: "",
     createdAt: Date.now(),
-
-    // ✅ مؤشرات للأوفلاين (عشان الأدمن يشوفها بسهولة)
     lastOfflineAt: 0,
     lastOfflineFrom: "",
     lastOfflineText: ""
   };
 
   await set(reqRef, payload);
-  return { reqId: reqRef.key };
+  await setActiveRequestId(createdByUid, reqRef.key);
+  return { reqId: reqRef.key, reused: false };
 }
+
 
 export function listenMyRequest(reqId, cb) {
   if (!reqId) throw new Error("listenMyRequest: reqId is required");
@@ -187,12 +217,18 @@ export async function acceptRequest({ reqId, adminUid }) {
 
 export async function rejectRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("rejectRequest: reqId is required");
-  await update(ref(db, `requests/${reqId}`), {
-    status: "rejected",
-    rejectedAt: Date.now(),
-    assignedAdminUid: adminUid || ""
+
+  const s = await get(ref(db, `requests/${reqId}`));
+  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
+
+  await update(ref(db), {
+    [`requests/${reqId}/status`]: "rejected",
+    [`requests/${reqId}/rejectedAt`]: Date.now(),
+    [`requests/${reqId}/assignedAdminUid`]: adminUid || "",
+    ...(createdByUid ? { [`userState/${createdByUid}/activeRequestId`]: "" } : {})
   });
 }
+
 
 /**
  * Close a request/session (admin only).
@@ -201,6 +237,9 @@ export async function rejectRequest({ reqId, adminUid }) {
 export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" }) {
   if (!reqId) throw new Error("closeRequestAsAdmin: reqId is required");
   if (!adminUid) throw new Error("closeRequestAsAdmin: adminUid is required");
+
+  const s = await get(ref(db, `requests/${reqId}`));
+  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
 
   const endedAt = Date.now();
   const updates = {};
@@ -216,8 +255,13 @@ export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" })
   updates[`rooms/${reqId}/endedBy`] = adminUid;
   updates[`rooms/${reqId}/endReason`] = reason;
 
+  if(createdByUid){
+    updates[`userState/${createdByUid}/activeRequestId`] = "";
+  }
+
   await update(ref(db), updates);
 }
+
 
 export function listenRequest(reqId, cb) {
   if (!reqId) throw new Error("listenRequest: reqId is required");
