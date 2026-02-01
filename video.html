@@ -399,7 +399,9 @@
 
     peer.on("call", async (incoming)=>{
       try{
-        const wantsVideo = true;
+        // ✅ لا تفتح الكاميرا تلقائياً عند استقبال مكالمة
+        // يتم تشغيل الكاميرا فقط عندما يضغط المستخدم زر (اتصال فيديو)
+        const wantsVideo = false;
         const stream = await ensureMedia({ video: wantsVideo });
         closeCall();
         call = incoming;

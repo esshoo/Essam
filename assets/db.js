@@ -1,10 +1,15 @@
-export function listenAllRequests(cb){
-  return onValue(ref(db, "requests"), (snap)=>{
-    const out = [];
-    snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
-    cb(out);
-  });
+export function listenAllRequests(cb, onErr){
+  // Read all requests (admin). We avoid server-side queries to reduce rules/index friction.
+  return onValue(
+    ref(db, "requests"),
+    (snap)=>{
+      const out = [];
+      snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
+      out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+      cb(out);
+    },
+    (err)=>{ if(onErr) onErr(err); }
+  );
 }
 
 export function listenOfflineThreadsAdmin(cb){
@@ -62,6 +67,28 @@ export async function isAdmin(uid, email = "") {
     }
     throw err;
   }
+}
+
+
+export async function banUser({ uid, adminUid, reason = "" }){
+  if(!uid) throw new Error("banUser: uid is required");
+  const payload = {
+    by: adminUid || "",
+    reason: String(reason || "").slice(0, 200),
+    at: Date.now()
+  };
+  await set(ref(db, `bans/${uid}`), payload);
+}
+
+export async function unbanUser(uid){
+  if(!uid) throw new Error("unbanUser: uid is required");
+  await remove(ref(db, `bans/${uid}`));
+}
+
+export async function isBanned(uid){
+  if(!uid) return false;
+  const s = await get(ref(db, `bans/${uid}`));
+  return s.exists();
 }
 
 export async function createRequest({
@@ -142,6 +169,19 @@ export async function acceptRequest({ reqId, adminUid }) {
   }
 
   await update(ref(db), updates);
+
+  // ✅ رسالة نظام ثابتة (عشان ما تضيعش لو الاشعار اختفى)
+  try{
+    const sys = push(ref(db, `offlineMessages/${reqId}`));
+    await set(sys, {
+      fromUid: "system",
+      fromName: "النظام",
+      text: "✅ تم قبول طلبك. يمكنك دخول غرفة التواصل الآن.",
+      createdAt: Date.now(),
+      kind: "system"
+    });
+  }catch(_e){}
+
   return { roomId, token };
 }
 

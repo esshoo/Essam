@@ -75,7 +75,8 @@
     listenOfflineThreadsAdmin,
     clearOfflineMessagesAsAdmin,
     deleteOfflineMessageAsAdmin,
-    sendAdminReply
+    sendAdminReply,
+    banUser
   } from "./assets/db.js";
   import { toast, fmtTime, escapeHtml } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
@@ -146,6 +147,7 @@
         <div class="row">
           <button class="btn" data-act="accept" data-id="${r.id}">قبول</button>
           <button class="btn danger" data-act="reject" data-id="${r.id}">رفض</button>
+          <button class="btn danger" data-act="ban" data-uid="${r.createdByUid||""}">حظر</button>
         </div>
       `;
       reqList.appendChild(el);
@@ -158,6 +160,15 @@
         b.disabled = true;
         try{
           await primeAudio();
+          if(act === "ban"){
+            const uid = b.dataset.uid;
+            if(!uid) throw new Error("لا يوجد UID لهذا المستخدم");
+            await banUser({ uid, adminUid: user.uid, reason: "manual" });
+            toast("تم الحظر", "تم حظر هذا المستخدم. لن يستطيع إرسال طلبات/رسائل جديدة.");
+            errorBeep();
+            return;
+          }
+
           if(act === "accept"){
             pop();
             const { token } = await acceptRequest({ reqId: id, adminUid: user.uid });
@@ -182,7 +193,16 @@
 
   listenAllRequests((all)=>{
     requestMap = new Map(all.map(r=>[r.id, r]));
-    const items = all.filter(r=> (r.status||"") === "pending");
+    // ✅ نجمع الطلبات حسب المستخدم (عشان ما يبانش نفس الشخص كذا مرة)
+    const pending = all.filter(r=> (r.status||"") === "pending");
+    const byUser = new Map();
+    for(const r of pending){
+      const k = r.createdByUid || r.email || r.phone || r.id;
+      if(!byUser.has(k) || (r.createdAt||0) > (byUser.get(k).createdAt||0)){
+        byUser.set(k, r);
+      }
+    }
+    const items = Array.from(byUser.values()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
     // detect new pending
     const ids = new Set(items.map(x=>x.id));
@@ -196,6 +216,9 @@
     }
     seenPending = ids;
     renderPending(items);
+  }, (err)=>{
+    console.error(err);
+    toast("خطأ صلاحيات", "لوحة الأدمن لا تستطيع قراءة requests. تأكد أن Rules فيها requests/.read للأدمن ثم اعمل Hard Reload.");
   });
 
 
