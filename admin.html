@@ -75,8 +75,7 @@
     listenOfflineThreadsAdmin,
     clearOfflineMessagesAsAdmin,
     deleteOfflineMessageAsAdmin,
-    sendAdminReply,
-    banUser
+    sendAdminReply
   } from "./assets/db.js";
   import { toast, fmtTime, escapeHtml } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
@@ -147,7 +146,6 @@
         <div class="row">
           <button class="btn" data-act="accept" data-id="${r.id}">قبول</button>
           <button class="btn danger" data-act="reject" data-id="${r.id}">رفض</button>
-          <button class="btn danger" data-act="ban" data-uid="${r.createdByUid||""}">حظر</button>
         </div>
       `;
       reqList.appendChild(el);
@@ -160,15 +158,6 @@
         b.disabled = true;
         try{
           await primeAudio();
-          if(act === "ban"){
-            const uid = b.dataset.uid;
-            if(!uid) throw new Error("لا يوجد UID لهذا المستخدم");
-            await banUser({ uid, adminUid: user.uid, reason: "manual" });
-            toast("تم الحظر", "تم حظر هذا المستخدم. لن يستطيع إرسال طلبات/رسائل جديدة.");
-            errorBeep();
-            return;
-          }
-
           if(act === "accept"){
             pop();
             const { token } = await acceptRequest({ reqId: id, adminUid: user.uid });
@@ -193,13 +182,7 @@
 
   listenAllRequests((all)=>{
     requestMap = new Map(all.map(r=>[r.id, r]));
-
-    // ✅ عرض *كل* الطلبات المعلّقة (بدون دمج حسب المستخدم)
-    const items = all
-      .filter(r => String(r.status||"").trim().toLowerCase() === "pending")
-      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-
-    try{ pendingCountBadge.textContent = `عدد الطلبات المعلّقة: ${items.length}`; }catch{}
+    const items = all.filter(r=> (r.status||"") === "pending");
 
     // detect new pending
     const ids = new Set(items.map(x=>x.id));
@@ -213,9 +196,6 @@
     }
     seenPending = ids;
     renderPending(items);
-  }, (err)=>{
-    console.error(err);
-    toast("خطأ صلاحيات", "لوحة الأدمن لا تستطيع قراءة requests. تأكد أن Rules فيها requests/.read للأدمن ثم اعمل Hard Reload.");
   });
 
 
