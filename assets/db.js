@@ -4,10 +4,6 @@ import {
 } from "./firebase.js";
 import { randomToken } from "./ui.js";
 
-/**
- * Admin allowlist by email (frontend fallback only)
- * Real security is enforced by RTDB Rules.
- */
 const ADMIN_EMAILS = ["esshoo@gmail.com"];
 function normEmail(email){ return (email||"").trim().toLowerCase(); }
 function isPermissionDenied(err){
@@ -30,6 +26,7 @@ export async function isAdmin(uid, email = "") {
   }
 }
 
+// التعديل هنا: استخدام UID المستخدم كـ ID للطلب لضمان عدم التكرار
 export async function createRequest({
   createdByUid,
   createdByType,
@@ -39,203 +36,123 @@ export async function createRequest({
   note
 }) {
   if (!createdByUid) throw new Error("createRequest: createdByUid is required");
-  if (!createdByType) throw new Error("createRequest: createdByType is required");
-
-  const reqRef = push(ref(db, "requests"));
-  const payload = {
+  
+  // نستخدم UID المستخدم ليكون هو مسار الطلب الثابت
+  const reqRef = ref(db, `requests/${createdByUid}`);
+  
+  const data = {
     createdByUid,
     createdByType,
-    displayName: displayName || (email || "") || "",   // ✅ أفضل من فاضي
+    displayName: displayName || "Guest",
     email: email || "",
     phone: phone || "",
     note: note || "",
     status: "pending",
-    assignedAdminUid: "",
-    roomId: "",
-    roomToken: "",
     createdAt: Date.now(),
-
-    // ✅ مؤشرات للأوفلاين (عشان الأدمن يشوفها بسهولة)
     lastOfflineAt: 0,
-    lastOfflineFrom: "",
     lastOfflineText: ""
   };
 
-  await set(reqRef, payload);
-  return { reqId: reqRef.key };
-}
-
-export function listenMyRequest(reqId, cb) {
-  if (!reqId) throw new Error("listenMyRequest: reqId is required");
-  return onValue(ref(db, `requests/${reqId}`), (snap) => cb(snap.exists() ? snap.val() : null));
+  await set(reqRef, data);
+  return { reqId: createdByUid }; 
 }
 
 export function listenPendingRequests(cb) {
   const q = query(ref(db, "requests"), orderByChild("status"), equalTo("pending"));
   return onValue(q, (snap) => {
     const out = [];
-    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    snap.forEach((child) => {
+      out.push({ reqId: child.key, ...child.val() });
+    });
     cb(out);
   });
 }
 
-export async function acceptRequest({ reqId, adminUid }) {
-  if (!reqId) throw new Error("acceptRequest: reqId is required");
-  if (!adminUid) throw new Error("acceptRequest: adminUid is required");
-
-  const roomId = reqId;              // keep mapping simple
-  const token = randomToken(36);
-
-  const reqSnap = await get(ref(db, `requests/${reqId}`));
-  if (!reqSnap.exists()) throw new Error(`acceptRequest: request not found (${reqId})`);
-  const r = reqSnap.val();
-
-  const updates = {};
-  updates[`requests/${reqId}/status`] = "accepted";
-  updates[`requests/${reqId}/acceptedAt`] = Date.now();
-  updates[`requests/${reqId}/assignedAdminUid`] = adminUid;
-  updates[`requests/${reqId}/roomId`] = roomId;
-  updates[`requests/${reqId}/roomToken`] = token;
-
-  updates[`rooms/${roomId}/requestId`] = reqId;
-  updates[`rooms/${roomId}/active`] = true;
-  updates[`rooms/${roomId}/createdAt`] = Date.now();
-  updates[`rooms/${roomId}/participants/${adminUid}`] = true;
-
-  if (r && r.createdByUid) {
-    updates[`rooms/${roomId}/participants/${r.createdByUid}`] = true;
-  }
-
-  await update(ref(db), updates);
-  return { roomId, token };
-}
-
-export async function rejectRequest({ reqId, adminUid }) {
-  if (!reqId) throw new Error("rejectRequest: reqId is required");
-  await update(ref(db, `requests/${reqId}`), {
-    status: "rejected",
-    rejectedAt: Date.now(),
-    assignedAdminUid: adminUid || ""
+// دالة جديدة لمراقبة أي تحديث في الطلبات (لضمان وصول التنبيهات حتى لو الطلب قديم)
+export function listenRequestsWithOffline(cb) {
+  const q = query(ref(db, "requests"), orderByChild("lastOfflineAt"), startAt(1));
+  return onValue(q, (snap) => {
+    const out = [];
+    snap.forEach((child) => {
+      out.push({ reqId: child.key, ...child.val() });
+    });
+    cb(out);
   });
 }
 
-/**
- * Close a request/session (admin only).
- * Clears room token so the room can't be reopened without a new request.
- */
-export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" }) {
-  if (!reqId) throw new Error("closeRequestAsAdmin: reqId is required");
-  if (!adminUid) throw new Error("closeRequestAsAdmin: adminUid is required");
+export async function acceptRequest(reqId) {
+  const roomId = "room_" + randomToken(12);
+  const roomToken = randomToken(32);
+  
+  await update(ref(db, `requests/${reqId}`), {
+    status: "accepted",
+    roomId,
+    roomToken,
+    acceptedAt: Date.now()
+  });
 
-  const endedAt = Date.now();
-  const updates = {};
-  updates[`requests/${reqId}/status`] = "closed";
-  updates[`requests/${reqId}/endedAt`] = endedAt;
-  updates[`requests/${reqId}/endedBy`] = adminUid;
-  updates[`requests/${reqId}/endReason`] = reason;
-  updates[`requests/${reqId}/roomId`] = "";
-  updates[`requests/${reqId}/roomToken`] = "";
-
-  updates[`rooms/${reqId}/active`] = false;
-  updates[`rooms/${reqId}/endedAt`] = endedAt;
-  updates[`rooms/${reqId}/endedBy`] = adminUid;
-  updates[`rooms/${reqId}/endReason`] = reason;
-
-  await update(ref(db), updates);
+  await set(ref(db, `rooms/${roomId}`), {
+    createdAt: Date.now(),
+    participants: { [reqId]: true } 
+  });
+  
+  return { roomId, roomToken };
 }
 
-export function listenRequest(reqId, cb) {
-  if (!reqId) throw new Error("listenRequest: reqId is required");
-  return onValue(ref(db, `requests/${reqId}`), (snap) => cb(snap.exists() ? snap.val() : null));
+export async function rejectRequest(reqId) {
+  await update(ref(db, `requests/${reqId}`), { status: "rejected" });
 }
 
 export async function sendOfflineMessage({ reqId, fromUid, fromName, text }) {
-  if (!reqId) throw new Error("sendOfflineMessage: reqId is required");
+  const mid = push(ref(db, `offlineMessages/${reqId}`)).key;
+  const now = Date.now();
+  
+  await set(ref(db, `offlineMessages/${reqId}/${mid}`), {
+    fromUid,
+    fromName,
+    text,
+    at: now
+  });
 
-  const mref = push(ref(db, `offlineMessages/${reqId}`));
-  const payload = {
-    fromUid: fromUid || "",
-    fromName: fromName || "",
-    text: text || "",
-    createdAt: Date.now()
-  };
-
-  // 1) Save the offline message
-  await set(mref, payload);
-
-  // 2) Update a small summary on the request (so Admin sees it quickly)
-  // IMPORTANT: do a multi-location update so Rules can be applied per-field.
-  await update(ref(db), {
-    [`requests/${reqId}/lastOfflineAt`]: payload.createdAt,
-    [`requests/${reqId}/lastOfflineFrom`]: payload.fromName || payload.fromUid || "",
-    [`requests/${reqId}/lastOfflineText`]: (payload.text || "").slice(0, 120)
+  await update(ref(db, `requests/${reqId}`), {
+    lastOfflineAt: now,
+    lastOfflineFrom: fromName,
+    lastOfflineText: text.slice(0, 150)
   });
 }
 
-
-export function listenOfflineMessagesForRequest(reqId, cb) {
-  if (!reqId) throw new Error("listenOfflineMessagesForRequest: reqId is required");
-  return onValue(ref(db, `offlineMessages/${reqId}`), (snap) => {
-    const out = [];
-    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    cb(out);
-  });
-}
-
-
-
-export function listenRequestsWithOffline(cb){
-  // Requests that have lastOfflineAt > 0 (admin only, enforced by rules)
-  const q = query(ref(db, "requests"), orderByChild("lastOfflineAt"), startAt(1), limitToLast(50));
+export function listenOfflineMessages(reqId, cb) {
+  const q = query(ref(db, `offlineMessages/${reqId}`), limitToLast(50));
   return onValue(q, (snap) => {
     const out = [];
-    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a,b)=> (b.lastOfflineAt||0) - (a.lastOfflineAt||0));
+    snap.forEach((c) => { out.push({ mid: c.key, ...c.val() }); });
     cb(out);
   });
 }
 
-export async function clearOfflineMessagesAsAdmin(reqId){
-  if(!reqId) throw new Error("clearOfflineMessagesAsAdmin: reqId is required");
-  // delete thread + clear summary fields so it disappears from the admin inbox
+export async function clearOfflineMessagesAsAdmin(reqId) {
   await remove(ref(db, `offlineMessages/${reqId}`));
-  await update(ref(db), {
-    [`requests/${reqId}/lastOfflineAt`]: 0,
-    [`requests/${reqId}/lastOfflineFrom`]: "",
-    [`requests/${reqId}/lastOfflineText`]: ""
+  await update(ref(db, `requests/${reqId}`), {
+    lastOfflineAt: 0,
+    lastOfflineFrom: "",
+    lastOfflineText: ""
   });
 }
 
 export async function sendAdminReply({ reqId, adminUid, text }){
-  if(!reqId) throw new Error("sendAdminReply: reqId is required");
-  if(!adminUid) throw new Error("sendAdminReply: adminUid is required");
-  const t = (text||"").trim();
-  if(!t) throw new Error("sendAdminReply: empty");
   await update(ref(db, `requests/${reqId}`), {
-    adminReplyText: t.slice(0, 800),
+    adminReplyText: text.slice(0, 800),
     adminReplyAt: Date.now(),
     adminReplyBy: adminUid
   });
 }
 
-
 export async function saveFcmToken(uid, token) {
-  if (!uid) throw new Error("saveFcmToken: uid is required");
-  if (!token) return;
+  if (!uid) return;
   const safe = token.replace(/[^a-zA-Z0-9:_-]/g, "_");
   await set(ref(db, `fcmTokens/${uid}/${safe}`), true);
 }
 
 export async function setMyPeerId(roomId, uid, peerId) {
-  if (!roomId) throw new Error("setMyPeerId: roomId is required");
-  if (!uid) throw new Error("setMyPeerId: uid is required");
-  if (!peerId) throw new Error("setMyPeerId: peerId is required");
-  await set(ref(db, `rooms/${roomId}/peerIds/${uid}`), peerId);
-}
-
-export function listenPeerIds(roomId, cb) {
-  if (!roomId) throw new Error("listenPeerIds: roomId is required");
-  return onValue(ref(db, `rooms/${roomId}/peerIds`), (snap) => cb(snap.exists() ? snap.val() : {}));
+  await set(ref(db, `rooms/${roomId}/peers/${uid}`), peerId);
 }
