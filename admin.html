@@ -73,6 +73,7 @@
 
   const user = await requireAuth("index.html");
 
+  // ✅ مهم: مرر الإيميل
   const admin = await isAdmin(user.uid, user.email || "");
   if(!admin){
     toast("غير مصرح", "هذا الحساب ليس مديراً.");
@@ -174,7 +175,9 @@
       el.querySelector('[data-act="accept"]').addEventListener("click", async ()=>{
         try{
           const { roomId, token } = await acceptRequest({ reqId: r.id, adminUid: user.uid });
+
           toast("تم القبول", "سيتم فتح غرفة التواصل للمدير الآن.");
+          // ✅ افتح الغرفة للأدمن
           window.open(`video.html?room=${encodeURIComponent(roomId)}&token=${encodeURIComponent(token)}`, "_blank");
         }catch(e){
           console.error(e);

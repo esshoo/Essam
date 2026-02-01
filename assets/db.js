@@ -45,7 +45,7 @@ export async function createRequest({
   const payload = {
     createdByUid,
     createdByType,
-    displayName: displayName || (email || "") || "",
+    displayName: displayName || (email || "") || "",   // ✅ أفضل من فاضي
     email: email || "",
     phone: phone || "",
     note: note || "",
@@ -55,6 +55,7 @@ export async function createRequest({
     roomToken: "",
     createdAt: Date.now(),
 
+    // ✅ مؤشرات للأوفلاين (عشان الأدمن يشوفها بسهولة)
     lastOfflineAt: 0,
     lastOfflineFrom: "",
     lastOfflineText: ""
@@ -83,7 +84,7 @@ export async function acceptRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("acceptRequest: reqId is required");
   if (!adminUid) throw new Error("acceptRequest: adminUid is required");
 
-  const roomId = reqId;
+  const roomId = reqId;              // keep mapping simple
   const token = randomToken(36);
 
   const reqSnap = await get(ref(db, `requests/${reqId}`));
@@ -165,6 +166,7 @@ export async function pushGlobalMessage({ reqId, fromUid, name, contact, type, c
 }
 
 export function listenGlobalMessages(cb) {
+  // latest first (simple)
   return onValue(ref(db, `messages`), (snap) => {
     const out = [];
     snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
@@ -184,14 +186,18 @@ export async function sendOfflineMessage({ reqId, fromUid, fromName, text }) {
     createdAt: Date.now()
   };
 
+  // 1) Save the offline message
   await set(mref, payload);
 
-  await update(ref(db, `requests/${reqId}`), {
-    lastOfflineAt: payload.createdAt,
-    lastOfflineFrom: payload.fromName || payload.fromUid || "",
-    lastOfflineText: (payload.text || "").slice(0, 120)
+  // 2) Update a small summary on the request (so Admin sees it quickly)
+  // IMPORTANT: do a multi-location update so Rules can be applied per-field.
+  await update(ref(db), {
+    [`requests/${reqId}/lastOfflineAt`]: payload.createdAt,
+    [`requests/${reqId}/lastOfflineFrom`]: payload.fromName || payload.fromUid || "",
+    [`requests/${reqId}/lastOfflineText`]: (payload.text || "").slice(0, 120)
   });
 }
+
 
 export function listenOfflineMessagesForRequest(reqId, cb) {
   if (!reqId) throw new Error("listenOfflineMessagesForRequest: reqId is required");
@@ -208,4 +214,16 @@ export async function saveFcmToken(uid, token) {
   if (!token) return;
   const safe = token.replace(/[^a-zA-Z0-9:_-]/g, "_");
   await set(ref(db, `fcmTokens/${uid}/${safe}`), true);
+}
+
+export async function setMyPeerId(roomId, uid, peerId) {
+  if (!roomId) throw new Error("setMyPeerId: roomId is required");
+  if (!uid) throw new Error("setMyPeerId: uid is required");
+  if (!peerId) throw new Error("setMyPeerId: peerId is required");
+  await set(ref(db, `rooms/${roomId}/peerIds/${uid}`), peerId);
+}
+
+export function listenPeerIds(roomId, cb) {
+  if (!roomId) throw new Error("listenPeerIds: roomId is required");
+  return onValue(ref(db, `rooms/${roomId}/peerIds`), (snap) => cb(snap.exists() ? snap.val() : {}));
 }
