@@ -1,313 +1,205 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <title>Essam Support • Admin</title>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#0b1220" />
-  <link rel="icon" href="icons/icon-192.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/styles.css" />
-</head>
-
-<body>
-<div class="container">
-  <div class="header">
-    <div class="brand">
-      <div class="logo"></div>
-      <div>
-        <h1 class="h1">لوحة المدير</h1>
-        <div class="small" id="who"></div>
-      </div>
-    </div>
-    <div class="row">
-      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
-      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="title">الطلبات الجديدة (Pending)</div>
-      <div class="small">تظهر تلقائيًا. اضغط قبول لإنشاء غرفة.</div>
-      <hr/>
-      <div class="list" id="reqList"></div>
-    </div>
-
-    <div class="card">
-      <div class="title">رسائل العملاء (الأوفلاين)</div>
-      <div class="small">تظهر تلقائيًا. اختر محادثة لعرض الرسائل ثم (رد) أو (تفريغ).</div>
-      <hr/>
-      <div class="row" style="align-items:flex-start; gap:12px">
-        <div style="flex:1; min-width:260px">
-          <div class="small">صندوق الوارد</div>
-          <div class="list" id="offlineThreads"></div>
-        </div>
-        <div style="flex:1; min-width:260px">
-          <div class="small">الرسائل</div>
-          <div class="chatlog" id="msgsBox" style="height:240px; margin-top:8px"></div>
-          <div class="row" style="margin-top:10px">
-            <input class="input" id="replyText" placeholder="اكتب ردًا للعميل/الضيف..." />
-            <button class="btn" id="btnSendReply">رد</button>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <button class="btn danger" id="btnClearThread">تفريغ/حذف رسائل الأوفلاين</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">ملاحظة: الاتصال الصوت/فيديو يتم عبر PeerJS. لو واجهت مشكلة، جرّب شبكة مختلفة أو افتح الموقع بدون VPN.</div>
-</div>
-
-<script type="module">
-  import { requireAuth, logout } from "./assets/auth.js";
-  import {
-    isAdmin,
-    listenPendingRequests,
-    acceptRequest,
-    rejectRequest,
-    listenOfflineMessagesForRequest,
-    listenRequestsWithOffline,
-    clearOfflineMessagesAsAdmin,
-    sendAdminReply
-  } from "./assets/db.js";
-  import { toast, fmtTime, escapeHtml } from "./assets/ui.js";
-  import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
-  import { primeAudio, ring, beep, pop, errorBeep } from "./assets/sounds.js";
-
-  const who = document.getElementById("who");
-  const reqList = document.getElementById("reqList");
-  const btnLogout = document.getElementById("btnLogout");
-
-  const offlineThreads = document.getElementById("offlineThreads");
-  const msgsBox = document.getElementById("msgsBox");
-  const replyText = document.getElementById("replyText");
-  const btnSendReply = document.getElementById("btnSendReply");
-  const btnClearThread = document.getElementById("btnClearThread");
-
-  let selectedReqId = "";
-  let unsubThreadMsgs = null;
-
-  // Prime audio on first gesture so tones can play.
-  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
-
-  // Auth + admin check
-  const user = await requireAuth("index.html");
-  const adminOk = await isAdmin(user.uid, user.email || "");
-  if (!adminOk) {
-    toast("ليس لديك صلاحية", "سجّل الدخول بإيميل المدير");
-    location.replace("index.html");
-    throw new Error("Not admin");
-  }
-
-  who.textContent = `Admin: ${user.email || user.uid}`;
-  btnLogout.addEventListener("click", async () => {
-    await logout();
-    location.replace("index.html");
-  });
-
-  // Notifications button (FCM token)
-  try { await initMessaging(); } catch {}
-  wireNotificationButton("#btnEnableNotifs");
-
-  // ---------- Pending requests ----------
-  let seenPending = new Set();
-  let stopRing = null;
-
-  function renderPending(items){
-    reqList.innerHTML = "";
-    if(!items.length){
-      reqList.innerHTML = `<div class="small">لا توجد طلبات جديدة الآن.</div>`;
-      return;
-    }
-
-    for(const r of items){
-      const name = r.displayName || r.email || r.phone || r.createdByUid;
-      const meta = [
-        r.email ? `📧 ${r.email}` : "",
-        r.phone ? `📞 ${r.phone}` : "",
-        r.note ? `📝 ${escapeHtml(r.note)}` : ""
-      ].filter(Boolean).join(" • ");
-
-      const el = document.createElement("div");
-      el.className = "item";
-      el.innerHTML = `
-        <div>
-          <div><b>${escapeHtml(name)}</b></div>
-          <div class="small">${meta || ""}</div>
-          <div class="small">${fmtTime(r.createdAt || 0)} • ${escapeHtml(r.id)}</div>
-        </div>
-        <div class="row">
-          <button class="btn" data-act="accept" data-id="${r.id}">قبول</button>
-          <button class="btn danger" data-act="reject" data-id="${r.id}">رفض</button>
-        </div>
-      `;
-      reqList.appendChild(el);
-    }
-
-    reqList.querySelectorAll("button[data-act]").forEach((b)=>{
-      b.addEventListener("click", async ()=>{
-        const act = b.dataset.act;
-        const id = b.dataset.id;
-        b.disabled = true;
-        try{
-          await primeAudio();
-          if(act === "accept"){
-            pop();
-            const { token } = await acceptRequest({ reqId: id, adminUid: user.uid });
-            toast("تم القبول", "سيتم فتح غرفة الاتصال");
-            // Jump into room
-            location.href = `video.html?room=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`;
-          }else{
-            errorBeep();
-            await rejectRequest({ reqId: id, adminUid: user.uid });
-            toast("تم الرفض", "تم تحديث حالة الطلب");
-          }
-        }catch(e){
-          console.error(e);
-          toast("خطأ", e?.message || "تعذر تنفيذ العملية");
-          b.disabled = false;
+    <meta charset="UTF-8">
+    <title>لوحة تحكم عصام (Secure)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background: #333; color: white; padding: 20px; margin: 0; }
+        
+        /* إخفاء المحتوى تماماً حتى يتم التحقق */
+        #dashboard-content { display: none; }
+        
+        /* شاشة التحميل (تظهر أولاً) */
+        #security-check {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #222; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
         }
-      });
-    });
-  }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #e74c3c; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-  listenPendingRequests((items)=>{
-    // detect new pending
-    const ids = new Set(items.map(x=>x.id));
-    const newOnes = items.filter(x=>!seenPending.has(x.id));
-    if(seenPending.size && newOnes.length){
-      // ring once per batch
-      try{ stopRing?.(); }catch{}
-      stopRing = ring();
-      setTimeout(()=>{ try{ stopRing?.(); }catch{} }, 2200);
-      notifyLocal("طلب اتصال جديد", `${newOnes.length} طلب/طلبات جديدة`, location.href);
-    }
-    seenPending = ids;
-    renderPending(items);
-  });
+        /* تنسيقات اللوحة */
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #555; padding-bottom: 20px; }
+        .request-item { background: #444; padding: 15px; margin: 10px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .btn { padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; margin-left: 5px; }
+        .btn-accept { background: #28a745; color: white; }
+        .btn-reject { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
 
-  // ---------- Offline inbox ----------
-  let seenOffline = new Set();
+    <div id="security-check">
+        <div class="loader"></div>
+        <p style="margin-top: 15px; color: #bbb;">جاري التحقق من الصلاحيات...</p>
+    </div>
 
-  function threadLabel(r){
-    const name = r.displayName || r.email || r.phone || r.createdByUid;
-    const t = r.lastOfflineAt || 0;
-    const from = r.lastOfflineFrom || "";
-    const txt = r.lastOfflineText || "";
-    return { name, t, from, txt };
-  }
+    <div id="dashboard-content">
+        <div class="header">
+            <h2>غرفة التحكم 🕹️</h2>
+            <div>
+                <span style="color: #4cd137; margin-left: 10px;">● متصل كمدير</span>
+                <button onclick="logout()" style="background: #555; color: white; border: none; padding: 5px 10px; cursor: pointer;">خروج</button>
+            </div>
+        </div>
 
-  function renderThreads(items){
-    offlineThreads.innerHTML = "";
-    if(!items.length){
-      offlineThreads.innerHTML = `<div class="small">لا توجد رسائل أوفلاين.</div>`;
-      return;
-    }
+        <h3 style="margin-top: 30px;">قائمة الانتظار:</h3>
+        <div id="requests-list">
+            <p style="color: #777;" id="empty-msg">لا توجد طلبات جديدة...</p>
+        </div>
+    </div>
+<h3 style="margin-top: 30px; border-top: 1px solid #555; padding-top: 20px;">رسائل الواردة (Offline) 📩:</h3>
+<div id="messages-list">
+    <p style="color: #777;" id="no-msgs">لا توجد رسائل جديدة...</p>
+</div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, onChildAdded, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    for(const r of items){
-      const { name, t, from, txt } = threadLabel(r);
-      const el = document.createElement("div");
-      el.className = "item";
-      el.style.cursor = "pointer";
-      el.innerHTML = `
+        // ⚠️⚠️⚠️ ضع إيميلك هنا بدقة ⚠️⚠️⚠️
+        const ADMIN_EMAIL = "esshoo@gmail.com"; 
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // --- حارس البوابة (Security Guard) ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // هل هذا الإيميل هو إيميل عصام؟
+                if (user.email && user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+                    // ✅ نعم، هو المدير -> اسمح بالدخول
+                    document.getElementById('security-check').style.display = 'none';
+                    document.getElementById('dashboard-content').style.display = 'block';
+                    startDashboardLogic(); // شغل نظام الطلبات
+                } else {
+                    // ❌ مستخدم مسجل لكن ليس المدير -> حوله لصفحة العميل
+                    alert("عذراً، هذه الصفحة للمدير فقط!");
+                    window.location.href = "client.html";
+                }
+            } else {
+                // ❌ غير مسجل دخول أصلاً -> ارجع للبوابة
+                window.location.href = "index.html";
+            }
+        });
+
+        // --- منطق اللوحة (يعمل فقط بعد السماح) ---
+        function startDashboardLogic() {
+            const requestsRef = ref(db, 'requests');
+            onChildAdded(requestsRef, (snapshot) => {
+                const data = snapshot.val();
+                const key = snapshot.key;
+                if (data.status === 'pending') {
+                    document.getElementById('empty-msg').style.display = 'none';
+                    addRequestToUI(key, data.name, data.phone);
+                }
+            });
+        }
+
+// مراقبة رسائل الأوفلاين
+const messagesRef = ref(db, 'messages');
+onChildAdded(messagesRef, (snapshot) => {
+    const msg = snapshot.val();
+    document.getElementById('no-msgs').style.display = 'none';
+    
+    const div = document.createElement('div');
+    div.className = 'request-item';
+    div.style.background = '#2c3e50'; // لون مختلف للرسائل
+    div.innerHTML = `
         <div>
-          <div><b>${escapeHtml(name)}</b></div>
-          <div class="small">${escapeHtml(from)} • ${escapeHtml(txt)}</div>
-          <div class="small">${fmtTime(t)} • ${escapeHtml(r.id)}</div>
+            <strong>👤 ${msg.name}</strong> <small>(${msg.type})</small><br>
+            <span style="color:#aaa">📞 تواصل: ${msg.contact}</span><br>
+            <p style="background:rgba(0,0,0,0.2); padding:5px; border-radius:5px; margin-top:5px;">${msg.content}</p>
         </div>
-        <div class="row">
-          <button class="btn" data-open="${r.id}">فتح</button>
+        <div>
+            <small style="color:#888">${new Date(msg.timestamp).toLocaleTimeString()}</small>
         </div>
-      `;
-      offlineThreads.appendChild(el);
-    }
+    `;
+    document.getElementById('messages-list').appendChild(div);
+});
+        
+        function addRequestToUI(key, name, phone) {
+            const list = document.getElementById('requests-list');
+            const div = document.createElement('div');
+            div.className = 'request-item';
+            div.id = `req-${key}`;
+            div.innerHTML = `
+                <div>
+                    <strong>👤 ${name}</strong> <br>
+                    <small>📞 ${phone}</small>
+                </div>
+                <div>
+                    <button class="btn btn-accept" onclick="acceptUser('${key}', '${name}')">قبول ✅</button>
+                    <button class="btn btn-reject" onclick="rejectUser('${key}')">رفض ❌</button>
+                </div>
+            `;
+            list.appendChild(div);
+        }
 
-    offlineThreads.querySelectorAll("button[data-open]").forEach((b)=>{
-      b.addEventListener("click", ()=> openThread(b.dataset.open));
-    });
-  }
+        // دوال التحكم (Global)
+// دوال التحكم (Global)
+        window.acceptUser = function(key, name) {
+            // 1. نغير شكل الزر لنعرف أن العملية بدأت
+            const btn = document.querySelector(`#req-${key} .btn-accept`);
+            if(btn) btn.innerText = "جاري الربط...";
 
-  async function openThread(reqId){
-    selectedReqId = reqId;
-    msgsBox.innerHTML = `<div class="small">جاري التحميل...</div>`;
-    try{ unsubThreadMsgs?.(); }catch{}
-    unsubThreadMsgs = listenOfflineMessagesForRequest(reqId, (msgs)=>{
-      msgsBox.innerHTML = "";
-      if(!msgs.length){
-        msgsBox.innerHTML = `<div class="small">لا توجد رسائل لهذا الطلب.</div>`;
-        return;
-      }
-      for(const m of msgs){
-        const el = document.createElement("div");
-        el.className = "msg";
-        const who = m.fromName || m.fromUid || "—";
-        el.innerHTML = `<div class="who">${escapeHtml(who)} • ${fmtTime(m.createdAt||0)}</div><div>${escapeHtml(m.text||"")}</div>`;
-        msgsBox.appendChild(el);
-      }
-      msgsBox.scrollTop = msgsBox.scrollHeight;
-    });
-  }
+            // 2. نحاول تحديث الحالة في فايربيس (وننتظر النتيجة)
+            update(ref(db, `requests/${key}`), { status: 'accepted' })
+            .then(() => {
+                // ✅ نجاح: السيرفر قبل التعديل
+                console.log("تم قبول الطلب وحفظه في السيرفر");
+                
+                // إخفاء الطلب من القائمة
+                document.getElementById(`req-${key}`).style.display = 'none';
 
-  btnSendReply.addEventListener("click", async ()=>{
-    if(!selectedReqId){
-      toast("اختر محادثة أولاً", "اضغط (فتح) على رسالة من صندوق الوارد");
-      return;
-    }
-    const t = (replyText.value||"").trim();
-    if(!t) return;
+                // 3. فتح الصفحة (حالياً فيديو، ولاحقاً نغيرها لصفحة الدردشة الشاملة)
+                // نرسل رقم الغرفة (key) والاسم والدور
+                window.open(`video.html?room=${key}&role=admin&name=${encodeURIComponent(name)}`, '_blank');
+            })
+            .catch((error) => {
+                // ❌ فشل: السيرفر رفض (وهنا سنعرف سبب المشكلة)
+                console.error("فشل التحديث:", error);
+                
+                // إعادة الزر كما كان
+                if(btn) btn.innerText = "قبول ✅";
 
-    btnSendReply.disabled = true;
-    try{
-      await sendAdminReply({ reqId: selectedReqId, adminUid: user.uid, text: t });
-      replyText.value = "";
-      pop();
-      toast("تم الإرسال", "سيظهر الرد للعميل/الضيف");
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("خطأ", e?.message || "تعذر إرسال الرد");
-    }finally{
-      btnSendReply.disabled = false;
-    }
-  });
+                // رسالة واضحة لك بالخطأ
+                alert("⛔ لا يمكن قبول الطلب!\nهناك مشكلة في الصلاحيات (Rules).\n\nرسالة الخطأ من جوجل:\n" + error.message);
+            });
+        }
 
-  btnClearThread.addEventListener("click", async ()=>{
-    if(!selectedReqId){
-      toast("اختر محادثة أولاً", "اضغط (فتح) على رسالة من صندوق الوارد");
-      return;
-    }
-    btnClearThread.disabled = true;
-    try{
-      await clearOfflineMessagesAsAdmin(selectedReqId);
-      beep();
-      toast("تم التفريغ", "تم حذف رسائل الأوفلاين لهذه المحادثة");
-      msgsBox.innerHTML = `<div class="small">تم التفريغ.</div>`;
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("خطأ", e?.message || "تعذر التفريغ");
-    }finally{
-      btnClearThread.disabled = false;
-    }
-  });
+        window.rejectUser = function(key) {
+            // نفس المنطق للرفض (ننتظر التأكيد)
+            update(ref(db, `requests/${key}`), { status: 'rejected' })
+            .then(() => {
+                document.getElementById(`req-${key}`).style.display = 'none';
+            })
+            .catch((error) => {
+                alert("خطأ في الرفض: " + error.message);
+            });
+        }
 
-  listenRequestsWithOffline((items)=>{
-    const ids = new Set(items.map(x=>x.id));
-    const newOnes = items.filter(x=>!seenOffline.has(x.id));
-    if(seenOffline.size && newOnes.length){
-      beep();
-      notifyLocal("رسالة أوفلاين جديدة", `${newOnes.length} محادثة/محادثات جديدة`, location.href);
-    }
-    seenOffline = ids;
-    renderThreads(items);
-  });
-
-</script>
+        window.logout = function() {
+            signOut(auth).then(() => {
+                window.location.href = "index.html";
+            }).catch((error) => {
+                console.error("Error signing out: ", error);
+            });
+        }
+    </script>
 </body>
 </html>
+
+
+
+

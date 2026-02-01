@@ -1,512 +1,497 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Essam Support • Room</title>
-  <meta name="theme-color" content="#0b1220" />
-  <link rel="stylesheet" href="assets/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>غرفة التواصل المباشر</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --primary: #0088cc; --bg: #e5ddd5; --white: #ffffff; --green: #25d366; --red: #ff3b30; --msg-me: #dcf8c6; --dark: #333; }
+        body { font-family: 'Tajawal', sans-serif; margin: 0; background: #f0f2f5; height: 100vh; overflow: hidden; display: flex; justify-content: center; }
 
-  <!-- PeerJS (نفس النسخة القديمة المستقرة) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+        /* الشاشات */
+        .screen { width: 100%; max-width: 600px; height: 100%; background: var(--bg); display: flex; flex-direction: column; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        
+        /* الهيدر */
+        .header { background: var(--primary); color: white; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 60px; box-sizing: border-box; }
+        .user-info { display: flex; flex-direction: column; }
+        .user-name { font-weight: bold; font-size: 1.1em; }
+        .user-status { font-size: 0.75em; opacity: 0.9; }
 
-  <style>
-    .layout{display:grid; grid-template-columns: 360px 1fr; gap:12px;}
-    .side{position:sticky; top:12px; height:calc(100vh - 24px); display:flex; flex-direction:column; gap:12px;}
-    .videos{display:grid; grid-template-columns:1fr; gap:10px;}
-    video{width:100%; background:#000; border-radius:14px; min-height:190px;}
-    .vlabel{font-size:12px; opacity:.85; margin-bottom:6px}
-    .chat{display:flex; flex-direction:column; height:calc(100vh - 24px);}
-    .chatlog{flex:1; overflow:auto; padding:10px; border-radius:14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08)}
-    .msg{padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.06); margin:8px 0; border:1px solid rgba(255,255,255,.06)}
-    .msg.me{background:rgba(120,210,255,.12); border-color:rgba(120,210,255,.18)}
-    .msg.system{background:rgba(255,209,139,.10); border-color:rgba(255,209,139,.20)}
-    .who{font-size:12px; opacity:.85; margin-bottom:6px}
-    .inputRow{display:flex; gap:10px; margin-top:10px; align-items:center}
-    .inputRow .input{flex:1}
-    .fileRow{display:flex; gap:10px; align-items:center; margin-top:10px}
-    .pill{font-size:12px; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10)}
-    @media (max-width: 980px){
-      .layout{grid-template-columns:1fr;}
-      .side{position:relative; height:auto}
-      .chat{height:auto}
-      .chatlog{height:420px}
-    }
-  </style>
+        /* أزرار التحكم */
+        .controls-area { display: flex; align-items: center; gap: 8px; }
+        .call-btn { background: none; border: none; color: white; font-size: 1.3em; cursor: pointer; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .call-btn:hover { background: rgba(255,255,255,0.2); }
+        
+        /* زر التحكم بالكاميرا (للمدير فقط) */
+        #my-cam-btn { font-size: 1.1em; border: 1px solid white; background: rgba(255,0,0,0.5); display: none; }
+        .cam-on { background: var(--green) !important; border-color: var(--green) !important; }
+        
+        /* زر الخروج */
+        .logout-btn { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-size: 0.8em; }
+
+        /* تأثير الاتصال النشط */
+        .btn-active-call { background-color: var(--red) !important; animation: pulse-red 1s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); } }
+
+        /* منطقة الشات */
+        .chat-body { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-blend-mode: soft-light; }
+        .message { max-width: 75%; padding: 10px 15px; border-radius: 15px; font-size: 15px; position: relative; word-wrap: break-word; }
+        .msg-me { background: var(--msg-me); align-self: flex-end; border-bottom-left-radius: 0; }
+        .msg-other { background: var(--white); align-self: flex-start; border-bottom-right-radius: 0; }
+        .sys-msg { align-self: center; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 20px; font-size: 0.8em; color: white; margin: 5px 0; text-align: center; }
+        
+        /* المرفقات */
+        .media-thumb { max-width: 200px; max-height: 150px; border-radius: 10px; margin-top: 5px; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); }
+        .file-link { display: flex; align-items: center; text-decoration: none; color: #333; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 10px; margin-top: 5px; }
+
+        /* الفوتر (الكتابة) */
+        .chat-footer { background: #f0f0f0; padding: 10px; display: flex; align-items: center; gap: 10px; }
+        .chat-footer input { margin: 0; flex: 1; border: none; padding: 12px; border-radius: 20px; outline: none; }
+        .attach-btn { font-size: 1.5em; cursor: pointer; color: #555; padding: 0 10px; }
+        .send-btn { background: var(--primary); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+
+        /* النوافذ المنبثقة (فيديو - اتصال) */
+        #incoming-modal, #video-modal, #lightbox-modal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; }
+        #incoming-modal { background: rgba(0,0,0,0.9); flex-direction: column; justify-content: center; align-items: center; color: white; }
+        #video-modal { background: black; }
+        #lightbox-modal { background: rgba(0,0,0,0.95); justify-content: center; align-items: center; z-index: 200; }
+        
+        /* عناصر الفيديو */
+        #remote-video { width: 100%; height: 100%; object-fit: cover; }
+        #local-video { position: absolute; bottom: 20px; right: 20px; width: 100px; height: 140px; background: #333; border: 2px solid white; border-radius: 10px; object-fit: cover; transform: scaleX(-1); }
+        
+        /* عناصر العرض (Lightbox) */
+        #lightbox-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        #lightbox-video { max-width: 100%; max-height: 100%; }
+        .close-lightbox { position: absolute; top: 20px; right: 20px; color: white; font-size: 30px; cursor: pointer; z-index: 201; background: rgba(0,0,0,0.5); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        
+        .incoming-actions { margin-top: 50px; display: flex; gap: 40px; }
+        .action-btn { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; color: white; border: none; }
+    </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <div class="brand">
-      <div class="logo"></div>
-      <div>
-        <h1 class="h1">غرفة التواصل</h1>
-        <div class="small" id="hdr"></div>
-      </div>
-    </div>
-    <div class="row">
-      <span class="pill" id="status">...</span>
-      <button class="btn" id="btnHangup">إغلاق المكالمة</button>
-      <button class="btn danger" id="btnEnd">إنهاء الجلسة</button>
-    </div>
-  </div>
 
-  <div class="layout">
-    <div class="side">
-      <div class="card">
-        <div class="title">الصوت/الفيديو</div>
-        <div class="small" id="roomInfo"></div>
-        <hr/>
-        <div class="videos">
-          <div>
-            <div class="vlabel" id="meLabel">أنت</div>
-            <video id="localVideo" autoplay playsinline muted></video>
-          </div>
-          <div>
-            <div class="vlabel" id="otherLabel">الطرف الآخر</div>
-            <video id="remoteVideo" autoplay playsinline></video>
-          </div>
+    <div id="chat-screen" class="screen">
+        <div class="header">
+            <div class="user-info">
+                <div class="user-name" id="chat-header-name">جاري التحميل...</div>
+                <div class="user-status" id="connection-status">يرجى الانتظار</div>
+            </div>
+            
+            <div class="controls-area">
+                <button class="call-btn" id="btn-audio" onclick="toggleCall('audio')">📞</button>
+                <button class="call-btn" id="btn-video" onclick="toggleCall('video')">📹</button>
+                
+                <button class="call-btn" id="my-cam-btn" onclick="toggleMyCam()" title="تفعيل/تعطيل الكاميرا">🚫</button>
+                
+                <button class="logout-btn" onclick="exitChat()">إنهاء</button>
+            </div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <button class="btn" id="btnCallAudio">اتصال صوت</button>
-          <button class="btn" id="btnCallVideo">اتصال فيديو</button>
-        </div>
-        <div class="row" style="margin-top:10px">
-          <button class="btn" id="btnMic">كتم المايك</button>
-          <button class="btn" id="btnCam">إيقاف الكاميرا</button>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="title">إرسال ملفات</div>
-        <div class="small">صور/فيديو/أي ملف (عبر PeerJS DataChannel)</div>
-        <hr/>
-        <div class="fileRow">
-          <input type="file" id="fileInput" class="input" />
-          <button class="btn" id="btnSendFile">إرسال</button>
+        <div class="chat-body" id="chat-box"></div>
+
+        <div class="chat-footer">
+            <span class="attach-btn" onclick="document.getElementById('file-input').click()">📎</span>
+            <input type="file" id="file-input" hidden onchange="sendFile(this)">
+            <input type="text" id="msg-input" placeholder="اكتب رسالة..." onkeypress="if(event.key==='Enter') sendText()">
+            <button class="send-btn" onclick="sendText()">➤</button>
         </div>
-        <div class="small" id="fileHint" style="margin-top:10px; opacity:.8">ملاحظة: الملفات الكبيرة جداً قد تفشل حسب الشبكة.</div>
-      </div>
     </div>
 
-    <div class="chat">
-      <div class="card" style="flex:1">
-        <div class="title">المحادثة</div>
-        <div class="small">رسائل فورية داخل الجلسة (ليست أوفلاين)</div>
-        <hr/>
-        <div class="chatlog" id="chatLog"></div>
-        <div class="inputRow">
-          <input class="input" id="chatText" placeholder="اكتب رسالة..." />
-          <button class="btn primary" id="btnSend">إرسال</button>
+    <div id="incoming-modal">
+        <div style="font-size:50px; margin-bottom:20px">📲</div>
+        <h3 id="incoming-caller-name">اتصال وارد...</h3>
+        <p>يرغب في التحدث معك</p>
+        <div class="incoming-actions">
+            <button class="action-btn" style="background: var(--red);" onclick="rejectCall()">✖</button>
+            <button class="action-btn" style="background: var(--green);" onclick="acceptCall()">✔</button>
         </div>
-      </div>
     </div>
-  </div>
 
-  <div class="footer">إذا لم يتصل الطرف الآخر: افتح صفحة الغرفة عند الطرفين. الـ Peer ID هنا ثابت مثل النسخة القديمة.</div>
-</div>
+    <div id="video-modal">
+        <video id="remote-video" autoplay playsinline></video>
+        <video id="local-video" autoplay muted playsinline></video>
+        <button class="action-btn" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:var(--red);" onclick="endCurrentCall()">📞</button>
+    </div>
 
-<script type="module">
-  import { requireAuth } from "./assets/auth.js";
-  import { isAdmin, closeRequestAsAdmin, listenRequest } from "./assets/db.js";
-  import { db, ref, get } from "./assets/firebase.js";
-  import { toast } from "./assets/ui.js";
-  import { notifyLocal } from "./assets/notifications.js";
-  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
+    <div id="lightbox-modal">
+        <div class="close-lightbox" onclick="closeLightbox()">✖</div>
+        <div id="lightbox-content"></div>
+    </div>
 
-  const qs = new URLSearchParams(location.search);
-  const roomId = qs.get("room") || "";
-  const token = qs.get("token") || "";
+    <script>
+        // --- 1. استخراج البيانات من الرابط (المفتاح السحري) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const ROOM_ID = urlParams.get('room');
+        const ROLE = urlParams.get('role'); // admin OR client
+        let MY_NAME = urlParams.get('name') || "مستخدم";
 
-  const hdr = document.getElementById("hdr");
-  const statusEl = document.getElementById("status");
-  const btnHangup = document.getElementById("btnHangup");
-  const roomInfo = document.getElementById("roomInfo");
-  const meLabel = document.getElementById("meLabel");
-  const otherLabel = document.getElementById("otherLabel");
-
-  const localVideo = document.getElementById("localVideo");
-  const remoteVideo = document.getElementById("remoteVideo");
-
-  const btnEnd = document.getElementById("btnEnd");
-
-  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
-  const btnCallAudio = document.getElementById("btnCallAudio");
-  const btnCallVideo = document.getElementById("btnCallVideo");
-  const btnMic = document.getElementById("btnMic");
-  const btnCam = document.getElementById("btnCam");
-
-  const chatLog = document.getElementById("chatLog");
-  const chatText = document.getElementById("chatText");
-  const btnSend = document.getElementById("btnSend");
-
-  const fileInput = document.getElementById("fileInput");
-  const btnSendFile = document.getElementById("btnSendFile");
-
-  function setStatus(t){ statusEl.textContent = t; }
-  function escapeHtml(s){ return String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
-  function addMsg({ who, text, kind="msg" }){
-    const div = document.createElement("div");
-    div.className = `msg ${kind}`;
-    div.innerHTML = `<div class="who">${escapeHtml(who)}</div><div>${text}</div>`;
-    chatLog.appendChild(div);
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-  function redirectBack(user, admin){
-    if(admin) return location.replace("admin.html");
-    return location.replace(user.isAnonymous ? "guest.html" : "client.html");
-  }
-
-  if(!roomId || !token){
-    toast("رابط غير صحيح", "ارجع لصفحة الطلب");
-    location.replace("index.html");
-  }
-
-  // 1) Auth
-  const user = await requireAuth("index.html");
-  const admin = await isAdmin(user.uid, user.email || "");
-
-  // 2) Validate request/token
-  const snap = await get(ref(db, `requests/${roomId}`));
-  if(!snap.exists()){
-    toast("الغرفة غير موجودة", "الطلب غير موجود");
-    redirectBack(user, admin);
-  }
-  const req = snap.val();
-  if(String(req.roomToken||"") !== String(token)){
-    toast("Token غير صحيح", "قد تكون الجلسة انتهت");
-    redirectBack(user, admin);
-  }
-  if(String(req.status||"") !== "accepted"){
-    toast("الجلسة غير متاحة", `الحالة الحالية: ${req.status||"—"}`);
-    redirectBack(user, admin);
-  }
-
-  const clientName = (req.displayName || req.email || req.createdByUid || "Client");
-  const adminName = (user.displayName || user.email || "Admin");
-  const myName = admin ? adminName : (user.displayName || user.email || clientName || "User");
-  const otherName = admin ? clientName : "الدعم";
-
-  hdr.textContent = `${admin ? "مدير" : "عميل"} • ${myName}`;
-  roomInfo.textContent = `Room: ${roomId}`;
-  meLabel.textContent = `أنت (${myName})`;
-  otherLabel.textContent = `الطرف الآخر (${otherName})`;
-
-  // Listen for request state changes (close, revoke token, etc.)
-  listenRequest(roomId, (r)=>{
-    if(!r) return;
-    if(r.status === "closed" || r.status === "ended" || !r.roomToken){
-      addMsg({ who: "النظام", text: "تم إنهاء الجلسة.", kind: "system" });
-      setTimeout(()=>redirectBack(user, admin), 600);
-    }
-  });
-
-  // 3) PeerJS stable IDs (مثل النسخة القديمة)
-  if(!window.Peer){
-    toast("PeerJS غير متاح", "تأكد من عدم حجب cdnjs");
-    redirectBack(user, admin);
-  }
-
-  const cleanRoom = String(roomId).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32) || "room";
-  const myPeerId = (admin ? "admin_" : "client_") + cleanRoom;
-  const otherPeerId = (admin ? "client_" : "admin_") + cleanRoom;
-
-  let peer = null;
-  let conn = null;
-  let call = null;
-  let localStream = null;
-  let micMuted = false;
-  let camOff = false;
-
-  async function ensureMedia({ video }){
-    if(localStream){
-      // if we only had audio before and now want video, try upgrade
-      const hasVideo = localStream.getVideoTracks().some(t=>t.readyState === "live");
-      if(video && !hasVideo){
-        localStream.getTracks().forEach(t=>t.stop());
-        localStream = null;
-      }
-    }
-    if(!localStream){
-      localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video: !!video });
-      localVideo.srcObject = localStream;
-    }
-    return localStream;
-  }
-
-  function closeCall(){
-    try{ call?.close(); }catch{}
-    call = null;
-    remoteVideo.srcObject = null;
-  }
-
-  function closeConn(){
-    try{ conn?.close(); }catch{}
-    conn = null;
-  }
-
-  function system(text){ addMsg({ who: "النظام", text: escapeHtml(text), kind:"system"}); }
-
-  async function endSession(reason="ended"){
-    try{
-      // notify other
-      try{ conn?.send({ type:"session-end", reason }); }catch{}
-      closeCall();
-      closeConn();
-      try{ peer?.disconnect(); peer?.destroy(); }catch{}
-
-      if(admin){
-        // admin seals the session in DB so link becomes invalid
-        await closeRequestAsAdmin({ reqId: roomId, adminUid: user.uid, reason });
-      }
-    }catch(e){
-      console.error(e);
-    }
-  }
-
-
-  btnHangup.addEventListener("click", ()=>{
-    try{
-      if(call){ call.close(); call = null; }
-      // keep data-channel open for chat/files
-      if(localStream){
-        localStream.getTracks().forEach(t=> t.stop());
-        localStream = null;
-      }
-      localVideo.srcObject = null;
-      remoteVideo.srcObject = null;
-      system("تم إغلاق المكالمة. يمكنك مواصلة الدردشة أو بدء مكالمة جديدة.");
-      beep();
-    }catch(e){
-      console.error(e);
-    }
-  });
-
-  btnEnd.addEventListener("click", async ()=>{
-    btnEnd.disabled = true;
-    system("جاري إنهاء الجلسة...");
-    await endSession("left");
-    redirectBack(user, admin);
-  });
-
-  btnMic.addEventListener("click", ()=>{
-    if(!localStream) return;
-    micMuted = !micMuted;
-    localStream.getAudioTracks().forEach(t=>t.enabled = !micMuted);
-    btnMic.textContent = micMuted ? "إلغاء كتم" : "كتم المايك";
-  });
-
-  btnCam.addEventListener("click", ()=>{
-    if(!localStream) return;
-    camOff = !camOff;
-    localStream.getVideoTracks().forEach(t=>t.enabled = !camOff);
-    btnCam.textContent = camOff ? "تشغيل الكاميرا" : "إيقاف الكاميرا";
-  });
-
-  function setupConn(c){
-    conn = c;
-    setStatus("✅ متصل");
-    system("تم اتصال البيانات");
-
-    conn.on("open", ()=>{
-      try{ conn.send({ type:"hello", name: myName, isAdmin: admin }); }catch{}
-    });
-
-    conn.on("data", async (data)=>{
-      try{
-        if(!data || typeof data !== "object") return;
-        if(data.type === "hello"){
-          const n = data.name || otherName;
-          otherLabel.textContent = `الطرف الآخر (${n})`;
-          system(`اتصل: ${n}`);
-          pop();
-          notifyLocal("تم الاتصال", `تم الاتصال بـ ${n}`, location.href);
-          return;
+        if (!ROOM_ID || !ROLE) {
+            alert("رابط غير صالح! يجب الدخول عبر التطبيق.");
+            window.location.href = 'index.html';
         }
-        if(data.type === "chat"){
-          addMsg({ who: data.name || otherName, text: escapeHtml(data.text), kind:"" });
-          beep();
-          notifyLocal("رسالة جديدة", (data.text||"").slice(0,120), location.href);
-          return;
+
+        // --- 2. إعداد الهوية ---
+// 1. تنظيف رقم الغرفة من أي رموز خاصة (مثل - أو _)
+        // هذا سيحول "-OiLuv..." إلى "OiLuv" فقط ويمنع مشكلة الشرطتين
+        const cleanRoomId = ROOM_ID.replace(/[^a-zA-Z0-9]/g, '');
+
+        // 2. استخدام شرطة سفلية (_) بدلاً من العادية (-) لأنها أكثر أماناً
+        const myPeerId = `${ROLE}_${cleanRoomId}`;
+        const targetPeerId = ROLE === 'admin' ? `client_${cleanRoomId}` : `admin_${cleanRoomId}`;
+        
+        const displayName = ROLE === 'admin' ? "المهندس عصام" : MY_NAME;
+
+        let peer, conn;
+        let callObject = null, localStream = null, isCallActive = false, incomingReq = null;
+        let audioCtx = null, ringOsc = null;
+        let myCamEnabled = false; // افتراضياً الكاميرا مغلقة
+
+        // --- 3. التشغيل التلقائي ---
+        window.onload = function() {
+            initUI();
+            startPeerConnection();
+            initAudio(); // تجهيز الصوت للإشعارات
+        };
+
+        function initUI() {
+            // تجهيز الواجهة حسب الدور
+            if (ROLE === 'admin') {
+                document.getElementById('my-cam-btn').style.display = 'flex'; // إظهار زر الكاميرا
+                document.getElementById('chat-header-name').innerText = MY_NAME; // اسم العميل سيظهر هنا لاحقاً
+                updateCamBtnUI();
+            } else {
+                document.getElementById('chat-header-name').innerText = "المهندس عصام";
+                document.getElementById('my-cam-btn').style.display = 'none';
+                myCamEnabled = true; // العميل كاميرته مفتوحة دائماً
+            }
         }
-        if(data.type === "file"){
-          const name = data.name || "file";
-          const mime = data.mime || "application/octet-stream";
-          const buf = data.buf;
-          const blob = new Blob([buf], { type: mime });
-          const url = URL.createObjectURL(blob);
-          const safe = escapeHtml(name);
-          addMsg({
-            who: data.from || otherName,
-            text: `<a class="btn" href="${url}" download="${safe}">تحميل: ${safe}</a>`,
-            kind:""
-          });
-          return;
+
+        function startPeerConnection() {
+            document.getElementById('connection-status').innerText = "جاري الاتصال بالسيرفر...";
+            peer = new Peer(myPeerId);
+
+            peer.on('open', (id) => {
+                document.getElementById('connection-status').innerText = "متصل بالشبكة ✅";
+                
+                // إذا أنا المدير، سأبادر بالاتصال بالعميل
+                if (ROLE === 'admin') {
+                    connectToTarget();
+                }
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                if(err.type === 'peer-unavailable') {
+                    // محاولة إعادة الاتصال لو الطرف التاني لسه بيفتح
+                    if(ROLE === 'admin') setTimeout(connectToTarget, 2000);
+                } else if (err.type === 'unavailable-id') {
+                    alert("هذا الحساب مفتوح بالفعل في مكان آخر!");
+                }
+            });
+
+            peer.on('connection', (c) => { handleDataConnection(c); });
+            peer.on('call', (call) => { handleIncomingCall(call); });
         }
-        if(data.type === "session-end"){
-          system("الطرف الآخر أنهى الجلسة.");
-          errorBeep();
-          notifyLocal("انتهت الجلسة", "الطرف الآخر أنهى الجلسة", location.href);
-          await endSession("peer-ended");
-          redirectBack(user, admin);
-          return;
+
+        // دالة اتصال المدير بالعميل (للشات)
+        function connectToTarget() {
+            document.getElementById('connection-status').innerText = "جاري البحث عن الطرف الآخر...";
+            // نرسل اسمنا في البيانات
+            const c = peer.connect(targetPeerId, { metadata: { name: displayName } });
+            handleDataConnection(c);
         }
-      }catch(e){
-        console.error(e);
-      }
-    });
 
-    conn.on("close", async ()=>{
-      setStatus("⚠️ انقطع الاتصال");
-      system("تم فصل الاتصال");
-      errorBeep();
-      notifyLocal("انقطع الاتصال", "تم فصل الاتصال", location.href);
-      closeCall();
-      if(admin){
-        // لو انقطع بدون إنهاء، اقفل الجلسة لحماية الرابط
-        await closeRequestAsAdmin({ reqId: roomId, adminUid: user.uid, reason: "disconnect" }).catch(()=>{});
-      }
-    });
+        function handleDataConnection(c) {
+            conn = c;
+            conn.on('open', () => {
+                document.getElementById('connection-status').innerText = "متصل ✅";
+                // إذا أنا العميل، أرسل اسمي للمدير
+                if (ROLE === 'client') {
+                    conn.send({ type: 'name-handshake', name: displayName });
+                }
+                notifyUser('msg');
+            });
 
-    conn.on("error", (e)=>{
-      console.error(e);
-      setStatus("⚠️ خطأ اتصال");
-    });
-  }
+            conn.on('data', (data) => {
+                if(typeof data === 'string') {
+                    addMessage(data, 'other');
+                    notifyUser('msg');
+                } else if (data.type === 'name-handshake') {
+                    document.getElementById('chat-header-name').innerText = data.name;
+                    addSystemMessage(`انضم للمحادثة: ${data.name}`);
+                } else if (data.type === 'file') {
+                    const blob = new Blob([new Uint8Array(data.file)], { type: data.fileType });
+                    renderFileMessage({ file: blob, fileType: data.fileType, fileName: data.fileName }, 'other');
+                    notifyUser('msg');
+                } else if (data.type === 'call-end') {
+                    endCurrentCall(false);
+                }
+            });
 
-  function setupPeer(){
-    setStatus("⏳ تهيئة الاتصال...");
-    peer = new Peer(myPeerId, { debug: 2 });
+            conn.on('close', () => {
+                document.getElementById('connection-status').innerText = "انقطع الاتصال ❌";
+                addSystemMessage("الطرف الآخر غادر المحادثة");
+            });
+        }
 
-    peer.on("open", ()=>{
-      setStatus("⌛ في انتظار الطرف الآخر...");
-      system(`Peer Ready: ${myPeerId}`);
+        // --- دوال الكاميرا والتحكم (للمدير) ---
+        function toggleMyCam() {
+            myCamEnabled = !myCamEnabled;
+            updateCamBtnUI();
+            if(localStream) {
+                const videoTrack = localStream.getVideoTracks()[0];
+                if(videoTrack) videoTrack.enabled = myCamEnabled;
+            }
+        }
 
-      // admin يحاول الاتصال تلقائياً (والعميل أيضاً كنسخة احتياطية)
-      if(admin){
-        connectWithRetry();
-      }else{
-        // بعد ثانيتين، العميل يحاول برضو لو الأدمن ما اتصلش
-        setTimeout(()=>{ if(!conn) connectWithRetry(); }, 2000);
-      }
-    });
+        function updateCamBtnUI() {
+            const btn = document.getElementById('my-cam-btn');
+            if(myCamEnabled) {
+                btn.classList.add('cam-on');
+                btn.innerHTML = "📷"; // أيقونة كاميرا
+            } else {
+                btn.classList.remove('cam-on');
+                btn.innerHTML = "🚫"; // أيقونة ممنوع
+            }
+        }
 
-    peer.on("connection", (c)=>{
-      system("اتصال وارد...");
-      setupConn(c);
-    });
+        // --- منطق الاتصال (فيديو / صوت) ---
+        function toggleCall(type) {
+            if (isCallActive) {
+                if (confirm("إنهاء المكالمة الحالية؟")) endCurrentCall(true);
+            } else {
+                startCall(type);
+            }
+        }
 
-    peer.on("call", async (incoming)=>{
-      try{
-        const wantsVideo = true;
-        const stream = await ensureMedia({ video: wantsVideo });
-        closeCall();
-        call = incoming;
-        incoming.answer(stream);
-        incoming.on("stream", (rs)=>{ remoteVideo.srcObject = rs; setStatus("✅ متصل (Call)"); });
-        incoming.on("close", ()=>{ system("تم إنهاء المكالمة"); closeCall(); });
-        incoming.on("error", (e)=>{ console.error(e); system("خطأ مكالمة"); });
-      }catch(e){
-        console.error(e);
-        system("تعذر الرد على المكالمة");
-      }
-    });
+        function startCall(type) {
+            if(!conn || !conn.open) return alert("انتظر اتصال الطرف الآخر أولاً");
+            
+            navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(stream => {
+                localStream = stream;
+                
+                // تطبيق إعدادات الكاميرا (للمدير)
+                if (ROLE === 'admin') {
+                    localStream.getVideoTracks()[0].enabled = myCamEnabled;
+                }
 
-    peer.on("error", (e)=>{
-      console.error(e);
-      setStatus("⚠️ Peer Error");
-      system(e?.type || e?.message || "peer error");
-    });
-  }
+                if(type === 'video') {
+                    document.getElementById('video-modal').style.display = 'block';
+                    document.getElementById('local-video').srcObject = stream;
+                }
+                
+                const call = peer.call(targetPeerId, stream, { metadata: { type: type, name: displayName } });
+                handleCallStream(call);
+                setCallActiveState(true, type);
+            }).catch(err => alert("لا يمكن الوصول للكاميرا/المايك: " + err));
+        }
 
-  function connectWithRetry(){
-    let tries = 0;
-    const maxTries = 25;
+        function handleIncomingCall(call) {
+            incomingReq = call;
+            document.getElementById('incoming-modal').style.display = 'flex';
+            document.getElementById('incoming-caller-name').innerText = (call.metadata && call.metadata.name) ? call.metadata.name : "متصل";
+            notifyUser('ring');
+        }
 
-    const tick = ()=>{
-      tries++;
-      if(conn && conn.open) return;
-      if(tries > maxTries){
-        setStatus("❌ لم يتم الاتصال");
-        system("تعذر الاتصال بالطرف الآخر. تأكد أنه فتح نفس رابط الغرفة.");
-        return;
-      }
+        function acceptCall() {
+            stopNotification();
+            document.getElementById('incoming-modal').style.display = 'none';
+            const isVideo = incomingReq.metadata.type === 'video';
+            
+            navigator.mediaDevices.getUserMedia({video: true, audio: true}).then(stream => {
+                localStream = stream;
+                
+                // تطبيق إعدادات الكاميرا (للمدير)
+                if (ROLE === 'admin') {
+                    localStream.getVideoTracks()[0].enabled = myCamEnabled;
+                }
 
-      try{
-        setStatus("📡 محاولة اتصال...");
-        const c = peer.connect(otherPeerId, { reliable: true });
-        c.on("open", ()=> setupConn(c));
-        c.on("error", ()=>{ setTimeout(tick, 800); });
-      }catch{
-        setTimeout(tick, 800);
-      }
-    };
+                incomingReq.answer(stream);
+                
+                if(isVideo) {
+                    document.getElementById('video-modal').style.display = 'block';
+                    document.getElementById('local-video').srcObject = stream;
+                }
+                
+                handleCallStream(incomingReq);
+                setCallActiveState(true, incomingReq.metadata.type);
+            });
+        }
 
-    tick();
-  }
+        function rejectCall() {
+            stopNotification();
+            document.getElementById('incoming-modal').style.display = 'none';
+            if(incomingReq) incomingReq.close();
+            if(conn) conn.send("تم رفض المكالمة");
+        }
 
-  async function startCall(video){
-    if(!conn || !conn.open){
-      toast("غير متصل", "انتظر اتصال الطرف الآخر أولاً");
-      return;
-    }
-    try{
-      const stream = await ensureMedia({ video });
-      closeCall();
-      call = peer.call(otherPeerId, stream);
-      call.on("stream", (rs)=>{ remoteVideo.srcObject = rs; setStatus("✅ متصل (Call)"); });
-      call.on("close", ()=>{ system("تم إنهاء المكالمة"); closeCall(); });
-      call.on("error", (e)=>{ console.error(e); system("خطأ مكالمة"); });
-    }catch(e){
-      console.error(e);
-      toast("تعذر بدء المكالمة", e?.message || "");
-    }
-  }
+        function handleCallStream(call) {
+            callObject = call;
+            call.on('stream', remoteStream => {
+                if(document.getElementById('video-modal').style.display === 'block') {
+                    document.getElementById('remote-video').srcObject = remoteStream;
+                } else {
+                    // مكالمة صوتية (ننشئ عنصر صوت مخفي)
+                    const audio = new Audio();
+                    audio.srcObject = remoteStream;
+                    audio.play();
+                }
+            });
+            call.on('close', () => endCurrentCall(false));
+        }
 
-  btnCallAudio.addEventListener("click", ()=> startCall(false));
-  btnCallVideo.addEventListener("click", ()=> startCall(true));
+        function endCurrentCall(notify = true) {
+            if(callObject) callObject.close();
+            if(localStream) localStream.getTracks().forEach(t => t.stop());
+            document.getElementById('video-modal').style.display = 'none';
+            setCallActiveState(false);
+            if(notify && conn) conn.send({type: 'call-end'});
+        }
 
-  function sendChat(){
-    const t = (chatText.value||"").trim();
-    if(!t) return;
-    if(!conn || !conn.open){
-      toast("غير متصل", "لا يوجد اتصال بيانات");
-      return;
-    }
-    conn.send({ type:"chat", name: myName, text: t });
-    addMsg({ who: myName, text: escapeHtml(t), kind:"me" });
-    chatText.value = "";
-  }
+        function setCallActiveState(active, type) {
+            isCallActive = active;
+            const btnAudio = document.getElementById('btn-audio');
+            const btnVideo = document.getElementById('btn-video');
+            btnAudio.classList.remove('btn-active-call');
+            btnVideo.classList.remove('btn-active-call');
+            if(active) {
+                if(type === 'audio') btnAudio.classList.add('btn-active-call');
+                if(type === 'video') btnVideo.classList.add('btn-active-call');
+            }
+        }
 
-  btnSend.addEventListener("click", sendChat);
-  chatText.addEventListener("keydown", (e)=>{ if(e.key === "Enter") sendChat(); });
+        // --- أدوات الدردشة ---
+        function sendText() {
+            const input = document.getElementById('msg-input');
+            const txt = input.value;
+            if(!txt || !conn) return;
+            conn.send(txt);
+            addMessage(txt, 'me');
+            input.value = '';
+        }
 
-  btnSendFile.addEventListener("click", async ()=>{
-    if(!conn || !conn.open){
-      toast("غير متصل", "لا يوجد اتصال بيانات");
-      return;
-    }
-    const f = fileInput.files && fileInput.files[0];
-    if(!f){ toast("اختر ملف", ""); return; }
+        function addMessage(content, source) {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = `message ${source === 'me' ? 'msg-me' : 'msg-other'}`;
+            div.innerText = content;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
 
-    btnSendFile.disabled = true;
-    try{
-      const buf = await f.arrayBuffer();
-      conn.send({ type:"file", from: myName, name: f.name, mime: f.type || "application/octet-stream", buf });
-      addMsg({ who: myName, text: `📎 ${escapeHtml(f.name)}`, kind:"me" });
-      fileInput.value = "";
-    }catch(e){
-      console.error(e);
-      toast("فشل إرسال الملف", e?.message || "");
-    }finally{
-      btnSendFile.disabled = false;
-    }
-  });
+        function addSystemMessage(txt) {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = 'sys-msg';
+            div.innerText = txt;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
 
-  // Start
-  system(`جاري تهيئة الاتصال... (${admin ? "admin" : "client"})`);
-  setupPeer();
-</script>
+        function sendFile(input) {
+            const file = input.files[0];
+            if (!file || !conn) return;
+            
+            // قراءة الملف وإرساله كـ Buffer
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const buffer = e.target.result;
+                conn.send({ type: 'file', file: buffer, fileName: file.name, fileType: file.type });
+                
+                const blob = new Blob([buffer], { type: file.type });
+                renderFileMessage({ file: blob, fileType: file.type, fileName: file.name }, 'me');
+            };
+            reader.readAsArrayBuffer(file);
+            input.value = '';
+        }
+
+        function renderFileMessage(data, source) {
+            const box = document.getElementById('chat-box');
+            const div = document.createElement('div');
+            div.className = `message ${source === 'me' ? 'msg-me' : 'msg-other'}`;
+            
+            const url = URL.createObjectURL(data.file);
+            
+            if (data.fileType.startsWith('image/')) {
+                div.innerHTML = `<img src="${url}" class="media-thumb" onclick="openLightbox('${url}', 'img')">`;
+            } else if (data.fileType.startsWith('video/')) {
+                div.innerHTML = `<video src="${url}" class="media-thumb" onclick="openLightbox('${url}', 'video')"></video>`;
+            } else {
+                div.innerHTML = `<a href="${url}" download="${data.fileName}" class="file-link">📎 ${data.fileName}</a>`;
+            }
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // --- أدوات الصوت والإشعارات ---
+        function initAudio() { if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        
+        function notifyUser(type) {
+            if(!audioCtx) return;
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            if (type === 'msg') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'ring') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                osc.start();
+                ringOsc = { osc: osc, gain: gain };
+                
+                // رنين متقطع
+                if(window.ringInterval) clearInterval(window.ringInterval);
+                window.ringInterval = setInterval(() => {
+                    if(audioCtx.state === 'running') {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g); g.connect(audioCtx.destination);
+                        o.frequency.setValueAtTime(440, audioCtx.currentTime);
+                        g.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                        o.start(); o.stop(audioCtx.currentTime + 0.5);
+                    }
+                }, 1500);
+            }
+        }
+
+        function stopNotification() {
+            if(window.ringInterval) clearInterval(window.ringInterval);
+            if(ringOsc) { try{ ringOsc.osc.stop(); }catch(e){} ringOsc=null; }
+        }
+
+        // --- أدوات العرض (Lightbox) ---
+        function openLightbox(url, type) {
+            const modal = document.getElementById('lightbox-modal');
+            const content = document.getElementById('lightbox-content');
+            modal.style.display = 'flex';
+            if(type === 'img') content.innerHTML = `<img src="${url}" id="lightbox-img">`;
+            else content.innerHTML = `<video src="${url}" controls autoplay id="lightbox-video"></video>`;
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox-modal').style.display = 'none';
+            document.getElementById('lightbox-content').innerHTML = '';
+        }
+
+        function exitChat() {
+            if(confirm("هل تريد الخروج؟")) window.close();
+        }
+    </script>
 </body>
 </html>
+
+

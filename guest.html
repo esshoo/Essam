@@ -1,247 +1,170 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<title>Essam Support • Guest</title>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#0b1220" />
-<link rel="icon" href="icons/icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل طلب - ضيف</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Tajawal', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; }
+        button { width: 100%; padding: 12px; background: #0088cc; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .hidden { display: none; }
+        .status-box { margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; color: #0d47a1; }
+        .pulse { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <div class="brand">
-      <div class="logo"></div>
-      <div>
-        <h1 class="h1">الضيف</h1>
-        <div class="small" id="who"></div>
-      </div>
-    </div>
-    <div class="row">
-      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
-      <button class="btn" id="btnSwitch">التبديل لتسجيل الدخول</button>
-      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
-    </div>
-  </div>
 
-  <div class="grid">
-    <div class="card">
-      <div class="title">إرسال طلب دعم كضيف</div>
-      <div class="small">املأ رقم الهاتف والملاحظة (اختياري الهاتف).</div>
-      <hr/>
-    <div class="label">الاسم (مطلوب)</div>
-    <input class="input" id="guestName" placeholder="اكتب اسمك" />
-      <div class="label">رقم الهاتف (اختياري)</div>
-      <input class="input" id="phone" placeholder="05xxxxxxxx" />
-      <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
-      <textarea class="input" id="note" rows="4" placeholder="اكتب وصف مختصر للمشكلة..."></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn primary" id="btnSend">إرسال الطلب</button>
-        <span class="badge" id="statusBadge">جاهز</span>
-      </div>
-      <div class="small" id="reqInfo" style="margin-top:10px"></div>
+    <div class="card" id="form-card">
+        <h2>طلب محادثة 📹</h2>
+        <p>أدخل بياناتك ليتواصل معك م. عصام</p>
+        <input type="text" id="name" placeholder="الاسم الكريم">
+        <input type="tel" id="phone" placeholder="رقم الجوال">
+        <button onclick="submitRequest()">إرسال الطلب</button>
     </div>
 
-    <div class="card">
-      <div class="title">رسالة أوفلاين</div>
-      <div class="small">إذا لم تكن الجلسة متاحة، اترك رسالة للمدير.</div>
-      <hr/>
-      <textarea class="input" id="offlineText" rows="6" placeholder="اكتب رسالتك..."></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
-      </div>
+<div class="card hidden" id="waiting-card">
+    <div class="pulse" style="font-size: 50px;">⏳</div>
+    <h3>جاري تبليغ المهندس...</h3>
+    <p class="status-box" id="status-text">يرجى الانتظار، سيتم تحويلك فور القبول.</p>
+    
+    <div id="wait-actions" style="margin-top: 20px;">
+        <button onclick="showMsgForm()" style="background: #f39c12;">📝 اترك رسالة واخرج</button>
+        <button onclick="switchToLogin()" style="background: #7f8c8d; margin-top: 10px;">🔄 دخول بإيميل (إلغاء الضيف)</button>
     </div>
-  </div>
 
-  <div class="footer">لأفضل تجربة: ثبّت التطبيق (Install) ثم فعّل الإشعارات.</div>
+    <div id="msg-form" class="hidden" style="text-align: right; margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+        <p style="font-size: 14px; color: #555;">أكتب رسالتك وسنتواصل معك:</p>
+        <input type="text" id="msg-contact" placeholder="رقم واتساب أو إيميل للتواصل" style="width: 90%;">
+        <textarea id="msg-content" placeholder="اكتب رسالتك هنا..." style="width: 90%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit;" rows="3"></textarea>
+        <button onclick="sendOfflineMessage('guest')" style="background: #27ae60;">إرسال وإنهاء</button>
+        <button onclick="hideMsgForm()" style="background: transparent; color: #555; margin-top: 0;">إلغاء</button>
+    </div>
 </div>
 
-<script type="module">
-  import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
-  import { toast } from "./assets/ui.js";
-  import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
-  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-  const who = document.getElementById("who");
-  const btnLogout = document.getElementById("btnLogout");
-  const btnSwitch = document.getElementById("btnSwitch");
-  const btnSend = document.getElementById("btnSend");
-  const guestName = document.getElementById("guestName");
-  const phone = document.getElementById("phone");
-  const note = document.getElementById("note");
-  const statusBadge = document.getElementById("statusBadge");
-  const reqInfo = document.getElementById("reqInfo");
-  const offlineText = document.getElementById("offlineText");
-  const btnOffline = document.getElementById("btnOffline");
+        // إعدادات Firebase (نفسها في كل الملفات)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+        };
 
-  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+        
+        let myUid = null;
 
-  const user = await requireAuth("index.html");
+        // التأكد من أن المستخدم مسجل دخول (حتى لو ضيف)
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                myUid = user.uid; // حفظنا رقم الهوية لاستخدامه
+            } else {
+                // لو مش مسجل يرجع للبوابة
+                window.location.href = "index.html";
+            }
+        });
 
-  // لو أدمن: تحويل للوحة المدير
-  if (await isAdmin(user.uid, user.email || "")) location.replace("admin.html");
+        window.submitRequest = function() {
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
 
-  // لو مش anonymous يبقى عميل
-  if (!user.isAnonymous) location.replace("client.html");
+            if(!name || !phone) return alert("البيانات ناقصة");
+            if(!myUid) return alert("جاري التحميل... حاول مرة أخرى");
 
-  const savedName = localStorage.getItem("guestName") || "";
-  if(savedName) guestName.value = savedName;
+            const newRequestRef = push(ref(db, 'requests'));
+            const reqId = newRequestRef.key;
+            
+            set(newRequestRef, {
+                name: name,
+                phone: phone,
+                status: 'pending',
+                timestamp: Date.now(),
+                uid: myUid // ✅✅✅ هذا هو التعديل الأمني المهم
+            });
 
-  function getName(){
-    const n = (guestName.value||"").trim();
-    return n || "ضيف";
-  }
+            // إظهار الانتظار
+            document.getElementById('form-card').classList.add('hidden');
+            document.getElementById('waiting-card').classList.remove('hidden');
 
-  who.textContent = savedName ? `مرحباً ${savedName}` : `مرحباً ${getName()}`;
+            // مراقبة الحالة
+// هذا الكود يوضع داخل دالة submitRequest في النهاية
+onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+    const status = snapshot.val();
+    console.log("حالة الطلب الآن:", status); // هذا السطر سيظهر لك في الكونسول للمراقبة
 
-  try { await initMessaging(); } catch {}
-  wireNotificationButton("#btnEnableNotifs");
-
-  btnLogout.addEventListener("click", async ()=>{
-    await logout();
-    location.replace("index.html");
-  });
-
-  btnSwitch.addEventListener("click", async ()=>{
-    await logout();
-    location.replace("index.html");
-  });
-
-  let currentReqId = localStorage.getItem("guestReqId") || "";
-  let lastStatus = "";
-  let lastAdminReplyAt = 0;
-
-  function clearReq(){
-    currentReqId = "";
-    localStorage.removeItem("guestReqId");
-    lastStatus = "";
-    lastAdminReplyAt = 0;
-    statusBadge.textContent = "—";
-    reqInfo.innerHTML = "";
-  }
-
-  function watch(id){
-    if(!id) return;
-    statusBadge.textContent = "جارٍ المتابعة…";
-    listenMyRequest(id, (r)=>{
-      if(!r){
-        statusBadge.textContent = "غير موجود";
-        return;
-      }
-      const status = r.status || "—";
-      statusBadge.textContent = status;
-      reqInfo.innerHTML = `<div class="small">Request ID: <b>${id}</b></div>`;
-
-      if(r.adminReplyAt && r.adminReplyAt !== lastAdminReplyAt){
-        lastAdminReplyAt = r.adminReplyAt;
-        beep();
-        toast("رسالة من المدير", r.adminReplyText || "");
-        notifyLocal("رسالة من المدير", r.adminReplyText || "", location.href);
-      }
-
-      if(status !== lastStatus){
-        lastStatus = status;
-
-        if(status === "accepted" && r.roomId && r.roomToken){
-          pop();
-          toast("تم قبول الاتصال", "سيتم فتح غرفة التواصل تلقائياً");
-          notifyLocal("تم قبول الاتصال", "اضغط للدخول إلى الغرفة", `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`);
-          setTimeout(()=>{
-            location.href = `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`;
-          }, 400);
+    if (status === 'accepted') {
+        // ✅ التحويل الصحيح للفيديو الجديد
+        console.log("تم القبول! جاري التحويل...");
+        window.location.href = `video.html?room=${reqId}&role=client`;
+    } else if (status === 'rejected') {
+        alert("نعتذر، لا يمكن الرد حالياً.");
+        location.reload();
+    }
+});
         }
-
-        if(status === "rejected"){
-          errorBeep();
-          toast("تم رفض الطلب", "يمكنك إرسال طلب جديد");
-          notifyLocal("تم رفض الطلب", "يمكنك إرسال طلب جديد", location.href);
-          clearReq();
-        }
-
-        if(status === "closed"){
-          beep();
-          toast("انتهت الجلسة", "لو محتاج تواصل مرة أخرى، أرسل طلب جديد");
-          notifyLocal("انتهت الجلسة", "أرسل طلب جديد عند الحاجة", location.href);
-          clearReq();
-        }
-      }
-
-      if(status === "pending"){
-        reqInfo.innerHTML += `<div class="small" style="margin-top:10px">انتظر قبول المدير…</div>`;
-      }
-
-      if(status === "accepted" && r.roomId && r.roomToken){
-        reqInfo.innerHTML += `<div style="margin-top:10px">
-          <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
-        </div>`;
-      }
+        // 1. التبديل إلى تسجيل الدخول
+window.switchToLogin = function() {
+    // حذف بيانات الضيف وتسجيل الخروج
+    auth.signOut().then(() => {
+        window.location.href = "index.html";
     });
-  }
-  if(currentReqId) watch(currentReqId);
+}
 
-  guestName.addEventListener("input", ()=>{
-    localStorage.setItem("guestName", getName());
-    who.textContent = `مرحباً ${getName()}`;
-  });
+// 2. إظهار وإخفاء نموذج الرسالة
+window.showMsgForm = function() {
+    document.getElementById('wait-actions').classList.add('hidden');
+    document.getElementById('msg-form').classList.remove('hidden');
+}
 
-  btnSend.addEventListener("click", async ()=>{
-    btnSend.disabled = true;
-    try{
-      await primeAudio();
-      const nm = getName();
-      localStorage.setItem("guestName", nm);
+window.hideMsgForm = function() {
+    document.getElementById('msg-form').classList.add('hidden');
+    document.getElementById('wait-actions').classList.remove('hidden');
+}
 
-      const ph = (phone.value||"").trim();
-      const nt = (note.value||"").trim();
-      if(!nt) throw new Error("اكتب وصف المشكلة.");
-      const res = await createRequest({
-        createdByUid: user.uid,
-        createdByType: "guest",
-        displayName: nm,
-        email: "",
-        phone: ph,
-        note: nt
-      });
-      currentReqId = res.reqId;
-      localStorage.setItem("guestReqId", currentReqId);
-      pop();
-      toast("تم إرسال الطلب", "انتظر قبول المدير.");
-      watch(currentReqId);
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("تعذّر إرسال الطلب", e?.message || "");
-    }finally{ btnSend.disabled = false; }
-  });
+// 3. إرسال الرسالة
+window.sendOfflineMessage = function(userType) {
+    const contact = document.getElementById('msg-contact').value;
+    const content = document.getElementById('msg-content').value;
+    
+    if(!content || !contact) return alert("الرجاء كتابة الرسالة وطريقة التواصل");
 
-  btnOffline.addEventListener("click", async ()=>{
-    btnOffline.disabled = true;
-    try{
-      await primeAudio();
-      if(!currentReqId) throw new Error("أرسل طلباً أولاً.");
-      const t = (offlineText.value||"").trim();
-      if(!t) throw new Error("اكتب الرسالة.");
-      await sendOfflineMessage({
-        reqId: currentReqId,
-        fromUid: user.uid,
-        fromName: getName(),
-        text: t
-      });
-      offlineText.value = "";
-      pop();
-      toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("تعذّر الإرسال", e?.message || "");
-    }finally{ btnOffline.disabled = false; }
-  });
-</script>
+    push(ref(db, 'messages'), {
+        name: document.getElementById('name').value || "ضيف",
+        contact: contact,
+        content: content,
+        type: userType,
+        timestamp: Date.now()
+    }).then(() => {
+        alert("تم إرسال رسالتك بنجاح! سنتواصل معك قريباً.");
+        location.reload(); // إعادة تحميل الصفحة للبداية
+    });
+}
+
+// 4. تعديل مراقبة الرفض (داخل submitRequest)
+// استبدل جزء الـ else if (status === 'rejected') بهذا:
+/*
+else if (status === 'rejected') {
+    document.getElementById('status-text').innerText = "نعتذر، المهندس مشغول حالياً.";
+    document.getElementById('status-text').style.color = "red";
+    // نظهر نموذج الرسالة تلقائياً عند الرفض
+    showMsgForm();
+}
+*/
+    </script>
 </body>
 </html>
+
+
