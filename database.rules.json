@@ -2,95 +2,62 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "debug": {
-      ".read": "auth != null",
-      ".write": "auth != null"
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
     },
     "requests": {
-      ".read": "auth != null && auth.token.email == 'esshoo@gmail.com'",
+      "$rid": {
+        ".read": "auth != null && (data.child('createdByUid').val() === auth.uid || root.child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && ( ( !data.exists() && newData.child('createdByUid').val() === auth.uid ) || root.child('admins').child(auth.uid).val() === true )",
+        ".validate": "newData.hasChildren(['createdByUid','createdByType','status','createdAt'])",
+        "lastOfflineAt": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isNumber()"
+        },
+        "lastOfflineFrom": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "lastOfflineText": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        }
+      },
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       ".indexOn": [
         "status",
         "createdAt",
         "lastOfflineAt"
-      ],
-      "$rid": {
-        ".read": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.child('createdByUid').val() === auth.uid)",
-        ".write": "auth != null && (( !data.exists() && newData.child('createdByUid').val() === auth.uid && !root.child('bans').child(auth.uid).exists() ) || auth.token.email == 'esshoo@gmail.com')",
-        "lastOfflineAt": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.parent().child('createdByUid').val() === auth.uid)",
-          ".validate": "newData.isNumber()"
-        },
-        "lastOfflineFrom": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.parent().child('createdByUid').val() === auth.uid)",
-          ".validate": "newData.isString() && newData.val().length <= 120"
-        },
-        "lastOfflineText": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.parent().child('createdByUid').val() === auth.uid)",
-          ".validate": "newData.isString() && newData.val().length <= 200"
-        },
-
-        "pingAt": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.parent().child('createdByUid').val() === auth.uid)",
-          ".validate": "newData.isNumber()"
-        },
-        "pingFrom": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.parent().child('createdByUid').val() === auth.uid)",
-          ".validate": "newData.isString() && newData.val().length <= 120"
-        },
-        "adminReplyAt": {
-          ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-          ".validate": "newData.isNumber()"
-        },
-        "adminReplyText": {
-          ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-          ".validate": "newData.isString() && newData.val().length <= 1000"
-        },
-        "adminReplyBy": {
-          ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-          ".validate": "newData.isString()"
-        }
-      }
-    },
-    "offlineMessages": {
-      ".read": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-      "$rid": {
-        ".read": "auth != null && (auth.token.email == 'esshoo@gmail.com' || root.child('requests').child($rid).child('createdByUid').val() === auth.uid)",
-        ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-        "$mid": {
-          ".write": "auth != null && (auth.token.email == 'esshoo@gmail.com' || (root.child('requests').child($rid).child('createdByUid').val() === auth.uid && !root.child('bans').child(auth.uid).exists()))"
-        }
-      }
+      ]
     },
     "rooms": {
       "$roomId": {
-        ".read": "auth != null && (auth.token.email == 'esshoo@gmail.com' || data.child('participants').child(auth.uid).val() === true)",
-        ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'"
+        ".read": "auth != null && data.child('participants').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
       }
     },
-    "messages": {
-      ".read": "auth != null && auth.token.email == 'esshoo@gmail.com'",
-      ".write": "auth != null"
+    "offlineMessages": {
+      "$rid": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('requests').child($rid).child('createdByUid').val() === auth.uid)",
+        "$mid": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('requests').child($rid).child('createdByUid').val() === auth.uid)"
+        }
+      }
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      }
     },
     "fcmTokens": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         "$token": {
           ".write": "auth != null && auth.uid === $uid"
-        }
-      }
-    },
-    "bans": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
-        ".write": "auth != null && auth.token.email == 'esshoo@gmail.com'"
-      }
-    },
-    "userState": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
-        ".write": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
-        "activeRequestId": {
-          ".validate": "newData.isString() || newData.val() === '' || newData.val() === null"
         }
       }
     }

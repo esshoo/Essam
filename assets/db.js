@@ -1,42 +1,3 @@
-export function listenAllRequests(cb, onErr){
-  // Read all requests (admin). We avoid server-side queries to reduce rules/index friction.
-  return onValue(
-    ref(db, "requests"),
-    (snap)=>{
-      const out = [];
-      snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
-      out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
-      cb(out);
-    },
-    (err)=>{ if(onErr) onErr(err); }
-  );
-}
-
-export function listenOfflineThreadsAdmin(cb){
-  // Admin-only listing of /offlineMessages to avoid relying on lastOfflineAt updates.
-  return onValue(ref(db, "offlineMessages"), (snap)=>{
-    const threads = [];
-    snap.forEach((threadSnap)=>{
-      let last = null;
-      threadSnap.forEach((m)=>{
-        const v = m.val();
-        if(!last || (v?.createdAt||0) > (last.createdAt||0)){
-          last = { id: m.key, ...(v||{}) };
-        }
-      });
-      threads.push({ reqId: threadSnap.key, last });
-    });
-    threads.sort((a,b)=> ((b.last?.createdAt)||0) - ((a.last?.createdAt)||0));
-    cb(threads);
-  });
-}
-
-export async function deleteOfflineMessageAsAdmin(reqId, msgId){
-  if(!reqId) throw new Error("deleteOfflineMessageAsAdmin: reqId is required");
-  if(!msgId) throw new Error("deleteOfflineMessageAsAdmin: msgId is required");
-  await remove(ref(db, `offlineMessages/${reqId}/${msgId}`));
-}
-
 import {
   db, ref, get, set, push, update,
   onValue, query, orderByChild, equalTo, startAt, limitToLast, remove
@@ -69,51 +30,6 @@ export async function isAdmin(uid, email = "") {
   }
 }
 
-
-export async function banUser({ uid, adminUid, reason = "" }){
-  if(!uid) throw new Error("banUser: uid is required");
-  const payload = {
-    by: adminUid || "",
-    reason: String(reason || "").slice(0, 200),
-    at: Date.now()
-  };
-  await set(ref(db, `bans/${uid}`), payload);
-}
-
-export async function unbanUser(uid){
-  if(!uid) throw new Error("unbanUser: uid is required");
-  await remove(ref(db, `bans/${uid}`));
-}
-
-export async function isBanned(uid){
-  if(!uid) return false;
-  const s = await get(ref(db, `bans/${uid}`));
-  return s.exists();
-}
-
-
-export async function getActiveRequestId(uid){
-  if(!uid) return "";
-  try{
-    const s = await get(ref(db, `userState/${uid}/activeRequestId`));
-    return s.exists() ? (s.val() || "") : "";
-  }catch(err){
-    // لو الـ Rules لم تسمح (أو لم تضف userState بعد)، لا نكسر إنشاء الطلب.
-    if(isPermissionDenied(err)) return "";
-    throw err;
-  }
-}
-
-export async function setActiveRequestId(uid, reqId){
-  if(!uid) return;
-  await set(ref(db, `userState/${uid}/activeRequestId`), reqId || "");
-}
-
-
-export async function clearActiveRequestId(uid){
-  return setActiveRequestId(uid, "");
-}
-
 export async function createRequest({
   createdByUid,
   createdByType,
@@ -125,70 +41,11 @@ export async function createRequest({
   if (!createdByUid) throw new Error("createRequest: createdByUid is required");
   if (!createdByType) throw new Error("createRequest: createdByType is required");
 
-  // Block banned users (admin controls /bans)
-  if(await isBanned(createdByUid)){
-    throw new Error("تم حظرك من إرسال طلبات.");
-  }
-
-  // Prevent multiple pending/active requests for same user
-let activeId = await getActiveRequestId(createdByUid);
-if(activeId){
-  try{
-    const s = await get(ref(db, `requests/${activeId}`));
-    if(s.exists()){
-      const r = s.val();
-      const st = String(r.status || "").trim().toLowerCase();
-	      if(st === "pending"){
-	        // "Bump" the existing pending request so it re-appears at the top for admin.
-	        try{
-	          await update(ref(db), {
-	            [`requests/${activeId}/pingAt`]: Date.now(),
-	            [`requests/${activeId}/pingFrom`]: (displayName || email || phone || createdByUid || "").slice(0, 120)
-	          });
-	        }catch(_e){ /* ignore */ }
-	        return { reqId: activeId, reused: true, status: "pending" };
-	      }
-
-	      if(st === "accepted"){
-	        // If an old accepted room is still active, reuse.
-	        // Otherwise (room missing/inactive/expired), clear pointer and allow a new request.
-	        const roomId = r.roomId || activeId;
-	        const token = r.roomToken || "";
-	        const acceptedAt = Number(r.acceptedAt || 0);
-	        const base = acceptedAt || Number(r.createdAt || 0) || 0;
-	        const ageMs = base ? (Date.now() - base) : 0;
-	        const EXPIRE_MS = 2 * 60 * 60 * 1000; // 2 hours
-	
-	        let roomActive = false;
-	        try{
-	          const rs = await get(ref(db, `rooms/${roomId}/active`));
-	          roomActive = rs.exists() ? (rs.val() === true) : false;
-	        }catch(_e){ /* ignore */ }
-
-	        if(token && roomActive && (!base || ageMs < EXPIRE_MS)){
-	          return { reqId: activeId, reused: true, status: "accepted" };
-	        }
-	        // fallthrough: not active -> clear and create new
-	      }
-    }
-  }catch(err){
-    // If we cannot read the referenced request (old/foreign id), clear and continue.
-    if(isPermissionDenied(err)){
-      try{ await clearActiveRequestId(createdByUid); }catch{}
-      activeId = "";
-    }else{
-      throw err;
-    }
-  }
-  // Old request is not active anymore => clear active pointer
-  try{ await clearActiveRequestId(createdByUid); }catch{}
-}
-
-const reqRef = push(ref(db, "requests"));
+  const reqRef = push(ref(db, "requests"));
   const payload = {
     createdByUid,
     createdByType,
-    displayName: displayName || (email || "") || "",
+    displayName: displayName || (email || "") || "",   // ✅ أفضل من فاضي
     email: email || "",
     phone: phone || "",
     note: note || "",
@@ -197,22 +54,16 @@ const reqRef = push(ref(db, "requests"));
     roomId: "",
     roomToken: "",
     createdAt: Date.now(),
-    pingAt: 0,
-    pingFrom: "",
+
+    // ✅ مؤشرات للأوفلاين (عشان الأدمن يشوفها بسهولة)
     lastOfflineAt: 0,
     lastOfflineFrom: "",
     lastOfflineText: ""
   };
 
   await set(reqRef, payload);
-  try{
-    await setActiveRequestId(createdByUid, reqRef.key);
-  }catch(_e){
-    // لو userState غير متوفر في قواعدك بعد، تجاهل.
-  }
-  return { reqId: reqRef.key, reused: false };
+  return { reqId: reqRef.key };
 }
-
 
 export function listenMyRequest(reqId, cb) {
   if (!reqId) throw new Error("listenMyRequest: reqId is required");
@@ -257,36 +108,17 @@ export async function acceptRequest({ reqId, adminUid }) {
   }
 
   await update(ref(db), updates);
-
-  // ✅ رسالة نظام ثابتة (عشان ما تضيعش لو الاشعار اختفى)
-  try{
-    const sys = push(ref(db, `offlineMessages/${reqId}`));
-    await set(sys, {
-      fromUid: "system",
-      fromName: "النظام",
-      text: "✅ تم قبول طلبك. يمكنك دخول غرفة التواصل الآن.",
-      createdAt: Date.now(),
-      kind: "system"
-    });
-  }catch(_e){}
-
   return { roomId, token };
 }
 
 export async function rejectRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("rejectRequest: reqId is required");
-
-  const s = await get(ref(db, `requests/${reqId}`));
-  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
-
-  await update(ref(db), {
-    [`requests/${reqId}/status`]: "rejected",
-    [`requests/${reqId}/rejectedAt`]: Date.now(),
-    [`requests/${reqId}/assignedAdminUid`]: adminUid || "",
-    ...(createdByUid ? { [`userState/${createdByUid}/activeRequestId`]: "" } : {})
+  await update(ref(db, `requests/${reqId}`), {
+    status: "rejected",
+    rejectedAt: Date.now(),
+    assignedAdminUid: adminUid || ""
   });
 }
-
 
 /**
  * Close a request/session (admin only).
@@ -295,9 +127,6 @@ export async function rejectRequest({ reqId, adminUid }) {
 export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" }) {
   if (!reqId) throw new Error("closeRequestAsAdmin: reqId is required");
   if (!adminUid) throw new Error("closeRequestAsAdmin: adminUid is required");
-
-  const s = await get(ref(db, `requests/${reqId}`));
-  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
 
   const endedAt = Date.now();
   const updates = {};
@@ -313,13 +142,8 @@ export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" })
   updates[`rooms/${reqId}/endedBy`] = adminUid;
   updates[`rooms/${reqId}/endReason`] = reason;
 
-  if(createdByUid){
-    updates[`userState/${createdByUid}/activeRequestId`] = "";
-  }
-
   await update(ref(db), updates);
 }
-
 
 export function listenRequest(reqId, cb) {
   if (!reqId) throw new Error("listenRequest: reqId is required");
@@ -375,16 +199,12 @@ export function listenRequestsWithOffline(cb){
 
 export async function clearOfflineMessagesAsAdmin(reqId){
   if(!reqId) throw new Error("clearOfflineMessagesAsAdmin: reqId is required");
-  // Delete the whole thread (admin only, enforced by rules)
+  // delete thread + clear summary fields so it disappears from the admin inbox
   await remove(ref(db, `offlineMessages/${reqId}`));
-  // Clear summary fields so it disappears from the admin inbox
   await update(ref(db), {
     [`requests/${reqId}/lastOfflineAt`]: 0,
     [`requests/${reqId}/lastOfflineFrom`]: "",
-    [`requests/${reqId}/lastOfflineText`]: "",
-    [`requests/${reqId}/adminReplyAt`]: 0,
-    [`requests/${reqId}/adminReplyText`]: "",
-    [`requests/${reqId}/adminReplyBy`]: ""
+    [`requests/${reqId}/lastOfflineText`]: ""
   });
 }
 
@@ -393,27 +213,10 @@ export async function sendAdminReply({ reqId, adminUid, text }){
   if(!adminUid) throw new Error("sendAdminReply: adminUid is required");
   const t = (text||"").trim();
   if(!t) throw new Error("sendAdminReply: empty");
-
-  // 1) Store as an offline message so the client/guest can see it in the same thread.
-  const mref = push(ref(db, `offlineMessages/${reqId}`));
-  const payload = {
-    fromUid: adminUid,
-    fromName: "الدعم",
-    text: t.slice(0, 1200),
-    createdAt: Date.now()
-  };
-  await set(mref, payload);
-
-  // 2) Also set a small reply snapshot on the request to trigger client-side toasts.
-  await update(ref(db), {
-    [`requests/${reqId}/adminReplyText`]: payload.text.slice(0, 800),
-    [`requests/${reqId}/adminReplyAt`]: payload.createdAt,
-    [`requests/${reqId}/adminReplyBy`]: adminUid,
-
-    // keep lastOffline* updated so it appears in admin inbox too
-    [`requests/${reqId}/lastOfflineAt`]: payload.createdAt,
-    [`requests/${reqId}/lastOfflineFrom`]: payload.fromName,
-    [`requests/${reqId}/lastOfflineText`]: payload.text.slice(0, 120)
+  await update(ref(db, `requests/${reqId}`), {
+    adminReplyText: t.slice(0, 800),
+    adminReplyAt: Date.now(),
+    adminReplyBy: adminUid
   });
 }
 
