@@ -39,7 +39,7 @@
 
     <div class="card">
       <div class="title">رسائل العملاء (الأوفلاين)</div>
-      <div class="small">تظهر تلقائيًا. اختر محادثة لعرض الرسائل ثم (رد) أو (تفريغ).</div>
+      <div class="small">تظهر تلقائيًا عند تحديث أي طلب برسالة جديدة.</div>
       <hr/>
       <div class="row" style="align-items:flex-start; gap:12px">
         <div style="flex:1; min-width:260px">
@@ -47,31 +47,32 @@
           <div class="list" id="offlineThreads"></div>
         </div>
         <div style="flex:1; min-width:260px">
-          <div class="small">الرسائل</div>
+          <div class="small">المحادثة</div>
           <div class="chatlog" id="msgsBox" style="height:240px; margin-top:8px"></div>
           <div class="row" style="margin-top:10px">
-            <input class="input" id="replyText" placeholder="اكتب ردًا للعميل/الضيف..." />
+            <input class="input" id="replyText" placeholder="اكتب ردًا للعميل..." />
             <button class="btn" id="btnSendReply">رد</button>
           </div>
           <div class="row" style="margin-top:10px">
-            <button class="btn danger" id="btnClearThread">تفريغ/حذف رسائل الأوفلاين</button>
+            <button class="btn danger" id="btnClearThread">تفريغ المحادثة</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="footer">ملاحظة: الاتصال الصوت/فيديو يتم عبر PeerJS. لو واجهت مشكلة، جرّب شبكة مختلفة أو افتح الموقع بدون VPN.</div>
+  <div class="footer">نظام الدعم المطور • جميع الطلبات مرتبطة بمعرف المستخدم الثابت لضمان عدم التكرار.</div>
 </div>
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
+  // ✅ تم تحديث الموديولات لتطابق المسميات الجديدة في db.js
   import {
     isAdmin,
     listenPendingRequests,
     acceptRequest,
     rejectRequest,
-    listenOfflineMessagesForRequest,
+    listenOfflineMessages, // بديلة لـ listenOfflineMessagesForRequest
     listenRequestsWithOffline,
     clearOfflineMessagesAsAdmin,
     sendAdminReply
@@ -83,7 +84,6 @@
   const who = document.getElementById("who");
   const reqList = document.getElementById("reqList");
   const btnLogout = document.getElementById("btnLogout");
-
   const offlineThreads = document.getElementById("offlineThreads");
   const msgsBox = document.getElementById("msgsBox");
   const replyText = document.getElementById("replyText");
@@ -93,14 +93,11 @@
   let selectedReqId = "";
   let unsubThreadMsgs = null;
 
-  // Prime audio on first gesture so tones can play.
   window.addEventListener("pointerdown", () => primeAudio(), { once:true });
 
-  // Auth + admin check
   const user = await requireAuth("index.html");
   const adminOk = await isAdmin(user.uid, user.email || "");
   if (!adminOk) {
-    toast("ليس لديك صلاحية", "سجّل الدخول بإيميل المدير");
     location.replace("index.html");
     throw new Error("Not admin");
   }
@@ -111,202 +108,123 @@
     location.replace("index.html");
   });
 
-  // Notifications button (FCM token)
   try { await initMessaging(); } catch {}
   wireNotificationButton("#btnEnableNotifs");
 
-  // ---------- Pending requests ----------
+  // ---------- الطلبات الجديدة ----------
   let seenPending = new Set();
   let stopRing = null;
 
   function renderPending(items){
     reqList.innerHTML = "";
     if(!items.length){
-      reqList.innerHTML = `<div class="small">لا توجد طلبات جديدة الآن.</div>`;
+      reqList.innerHTML = `<div class="small">لا توجد طلبات معلقة.</div>`;
       return;
     }
 
     for(const r of items){
-      const name = r.displayName || r.email || r.phone || r.createdByUid;
-      const meta = [
-        r.email ? `📧 ${r.email}` : "",
-        r.phone ? `📞 ${r.phone}` : "",
-        r.note ? `📝 ${escapeHtml(r.note)}` : ""
-      ].filter(Boolean).join(" • ");
-
+      const name = r.displayName || r.email || r.createdByUid;
       const el = document.createElement("div");
       el.className = "item";
       el.innerHTML = `
         <div>
           <div><b>${escapeHtml(name)}</b></div>
-          <div class="small">${meta || ""}</div>
-          <div class="small">${fmtTime(r.createdAt || 0)} • ${escapeHtml(r.id)}</div>
+          <div class="small">${escapeHtml(r.note || "")}</div>
+          <div class="small">${fmtTime(r.createdAt)}</div>
         </div>
         <div class="row">
-          <button class="btn" data-act="accept" data-id="${r.id}">قبول</button>
-          <button class="btn danger" data-act="reject" data-id="${r.id}">رفض</button>
+          <button class="btn" data-act="accept" data-id="${r.reqId}">قبول</button>
+          <button class="btn danger" data-act="reject" data-id="${r.reqId}">رفض</button>
         </div>
       `;
       reqList.appendChild(el);
     }
 
-    reqList.querySelectorAll("button[data-act]").forEach((b)=>{
-      b.addEventListener("click", async ()=>{
-        const act = b.dataset.act;
+    reqList.querySelectorAll("button[data-act]").forEach(b => {
+      b.addEventListener("click", async () => {
         const id = b.dataset.id;
-        b.disabled = true;
-        try{
-          await primeAudio();
-          if(act === "accept"){
-            pop();
-            const { token } = await acceptRequest({ reqId: id, adminUid: user.uid });
-            toast("تم القبول", "سيتم فتح غرفة الاتصال");
-            // Jump into room
-            location.href = `video.html?room=${encodeURIComponent(id)}&token=${encodeURIComponent(token)}`;
-          }else{
-            errorBeep();
-            await rejectRequest({ reqId: id, adminUid: user.uid });
-            toast("تم الرفض", "تم تحديث حالة الطلب");
-          }
-        }catch(e){
-          console.error(e);
-          toast("خطأ", e?.message || "تعذر تنفيذ العملية");
-          b.disabled = false;
+        if(b.dataset.act === "accept"){
+          const { roomId, roomToken } = await acceptRequest(id);
+          location.href = `video.html?room=${roomId}&token=${roomToken}`;
+        } else {
+          await rejectRequest(id);
         }
       });
     });
   }
 
-  listenPendingRequests((items)=>{
-    // detect new pending
-    const ids = new Set(items.map(x=>x.id));
-    const newOnes = items.filter(x=>!seenPending.has(x.id));
+  listenPendingRequests(items => {
+    const ids = new Set(items.map(x => x.reqId));
+    const newOnes = items.filter(x => !seenPending.has(x.reqId));
     if(seenPending.size && newOnes.length){
-      // ring once per batch
       try{ stopRing?.(); }catch{}
       stopRing = ring();
-      setTimeout(()=>{ try{ stopRing?.(); }catch{} }, 2200);
-      notifyLocal("طلب اتصال جديد", `${newOnes.length} طلب/طلبات جديدة`, location.href);
+      setTimeout(() => stopRing?.(), 3000);
+      notifyLocal("طلب دعم جديد", `لديك ${newOnes.length} طلبات جديدة`, location.href);
     }
     seenPending = ids;
     renderPending(items);
   });
 
-  // ---------- Offline inbox ----------
-  let seenOffline = new Set();
-
-  function threadLabel(r){
-    const name = r.displayName || r.email || r.phone || r.createdByUid;
-    const t = r.lastOfflineAt || 0;
-    const from = r.lastOfflineFrom || "";
-    const txt = r.lastOfflineText || "";
-    return { name, t, from, txt };
-  }
-
+  // ---------- الرسائل أوفلاين ----------
   function renderThreads(items){
     offlineThreads.innerHTML = "";
     if(!items.length){
-      offlineThreads.innerHTML = `<div class="small">لا توجد رسائل أوفلاين.</div>`;
+      offlineThreads.innerHTML = `<div class="small">لا توجد رسائل.</div>`;
       return;
     }
 
-    for(const r of items){
-      const { name, t, from, txt } = threadLabel(r);
+    items.forEach(r => {
       const el = document.createElement("div");
       el.className = "item";
       el.style.cursor = "pointer";
       el.innerHTML = `
-        <div>
-          <div><b>${escapeHtml(name)}</b></div>
-          <div class="small">${escapeHtml(from)} • ${escapeHtml(txt)}</div>
-          <div class="small">${fmtTime(t)} • ${escapeHtml(r.id)}</div>
+        <div style="flex:1">
+          <b>${escapeHtml(r.displayName || "Client")}</b>
+          <div class="small">${escapeHtml(r.lastOfflineText || "")}</div>
         </div>
-        <div class="row">
-          <button class="btn" data-open="${r.id}">فتح</button>
-        </div>
+        <button class="btn" data-open="${r.reqId}">فتح</button>
       `;
       offlineThreads.appendChild(el);
-    }
+    });
 
-    offlineThreads.querySelectorAll("button[data-open]").forEach((b)=>{
-      b.addEventListener("click", ()=> openThread(b.dataset.open));
+    offlineThreads.querySelectorAll("button[data-open]").forEach(b => {
+      b.addEventListener("click", () => openThread(b.dataset.open));
     });
   }
 
   async function openThread(reqId){
     selectedReqId = reqId;
     msgsBox.innerHTML = `<div class="small">جاري التحميل...</div>`;
-    try{ unsubThreadMsgs?.(); }catch{}
-    unsubThreadMsgs = listenOfflineMessagesForRequest(reqId, (msgs)=>{
+    if(unsubThreadMsgs) unsubThreadMsgs();
+    unsubThreadMsgs = listenOfflineMessages(reqId, msgs => {
       msgsBox.innerHTML = "";
-      if(!msgs.length){
-        msgsBox.innerHTML = `<div class="small">لا توجد رسائل لهذا الطلب.</div>`;
-        return;
-      }
-      for(const m of msgs){
-        const el = document.createElement("div");
-        el.className = "msg";
-        const who = m.fromName || m.fromUid || "—";
-        el.innerHTML = `<div class="who">${escapeHtml(who)} • ${fmtTime(m.createdAt||0)}</div><div>${escapeHtml(m.text||"")}</div>`;
-        msgsBox.appendChild(el);
-      }
+      msgs.forEach(m => {
+        const div = document.createElement("div");
+        div.className = "msg";
+        div.innerHTML = `<div class="who">${escapeHtml(m.fromName)}</div><div>${escapeHtml(m.text)}</div>`;
+        msgsBox.appendChild(div);
+      });
       msgsBox.scrollTop = msgsBox.scrollHeight;
     });
   }
 
-  btnSendReply.addEventListener("click", async ()=>{
-    if(!selectedReqId){
-      toast("اختر محادثة أولاً", "اضغط (فتح) على رسالة من صندوق الوارد");
-      return;
-    }
-    const t = (replyText.value||"").trim();
-    if(!t) return;
-
-    btnSendReply.disabled = true;
-    try{
-      await sendAdminReply({ reqId: selectedReqId, adminUid: user.uid, text: t });
-      replyText.value = "";
-      pop();
-      toast("تم الإرسال", "سيظهر الرد للعميل/الضيف");
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("خطأ", e?.message || "تعذر إرسال الرد");
-    }finally{
-      btnSendReply.disabled = false;
-    }
+  btnSendReply.addEventListener("click", async () => {
+    if(!selectedReqId || !replyText.value.trim()) return;
+    await sendAdminReply({ reqId: selectedReqId, adminUid: user.uid, text: replyText.value });
+    replyText.value = "";
+    pop();
+    toast("تم إرسال الرد");
   });
 
-  btnClearThread.addEventListener("click", async ()=>{
-    if(!selectedReqId){
-      toast("اختر محادثة أولاً", "اضغط (فتح) على رسالة من صندوق الوارد");
-      return;
-    }
-    btnClearThread.disabled = true;
-    try{
-      await clearOfflineMessagesAsAdmin(selectedReqId);
-      beep();
-      toast("تم التفريغ", "تم حذف رسائل الأوفلاين لهذه المحادثة");
-      msgsBox.innerHTML = `<div class="small">تم التفريغ.</div>`;
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("خطأ", e?.message || "تعذر التفريغ");
-    }finally{
-      btnClearThread.disabled = false;
-    }
+  btnClearThread.addEventListener("click", async () => {
+    if(!selectedReqId) return;
+    await clearOfflineMessagesAsAdmin(selectedReqId);
+    msgsBox.innerHTML = "";
+    toast("تم تفريغ المحادثة");
   });
 
-  listenRequestsWithOffline((items)=>{
-    const ids = new Set(items.map(x=>x.id));
-    const newOnes = items.filter(x=>!seenOffline.has(x.id));
-    if(seenOffline.size && newOnes.length){
-      beep();
-      notifyLocal("رسالة أوفلاين جديدة", `${newOnes.length} محادثة/محادثات جديدة`, location.href);
-    }
-    seenOffline = ids;
-    renderThreads(items);
-  });
+  listenRequestsWithOffline(items => renderThreads(items));
 
 </script>
 </body>

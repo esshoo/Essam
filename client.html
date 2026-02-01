@@ -52,7 +52,6 @@
       <div class="row" style="margin-top:12px">
         <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
       </div>
-      <div class="small">ستظهر هذه الرسالة للمدير في لوحة التحكم.</div>
     </div>
   </div>
 
@@ -61,7 +60,8 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
+  // ✅ تم التأكد من استيراد الدوال الصحيحة المتوفرة في db.js المحدث
+  import { isAdmin, createRequest, listenRequest, sendOfflineMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
   import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
@@ -76,12 +76,10 @@
   const offlineText = document.getElementById("offlineText");
   const btnOffline = document.getElementById("btnOffline");
 
-  // enable audio tones after first gesture
   window.addEventListener("pointerdown", () => primeAudio(), { once:true });
 
   const user = await requireAuth("index.html");
 
-  // لو أدمن: حوله للوحة المدير
   if (await isAdmin(user.uid, user.email || "")) {
     location.replace("admin.html");
   }
@@ -96,33 +94,25 @@
     location.replace("index.html");
   });
 
-  let currentReqId = localStorage.getItem("clientReqId") || "";
   let lastStatus = "";
   let lastAdminReplyAt = 0;
 
-  function clearReq(){
-    currentReqId = "";
-    localStorage.removeItem("clientReqId");
-    lastStatus = "";
-    lastAdminReplyAt = 0;
-    statusBadge.textContent = "—";
-    reqInfo.innerHTML = "";
-  }
-
-  function watch(id){
-    if(!id) return;
+  // ✅ نستخدم UID المستخدم مباشرة لمراقبة الطلب
+  function watch(uid){
+    if(!uid) return;
     statusBadge.textContent = "جارٍ المتابعة…";
-    listenMyRequest(id, async (r)=>{
+    
+    // listenRequest هي البديل لـ listenMyRequest في الكود المحدث
+    listenRequest(uid, async (r)=>{
       if(!r){
-        statusBadge.textContent = "غير موجود";
+        statusBadge.textContent = "جاهز للإرسال";
         return;
       }
 
       const status = r.status || "—";
       statusBadge.textContent = status;
-      reqInfo.innerHTML = `<div class="small">Request ID: <b>${id}</b></div>`;
+      reqInfo.innerHTML = `<div class="small">User ID: <b>${uid}</b></div>`;
 
-      // admin reply (offline)
       if(r.adminReplyAt && r.adminReplyAt !== lastAdminReplyAt){
         lastAdminReplyAt = r.adminReplyAt;
         beep();
@@ -130,7 +120,6 @@
         notifyLocal("رسالة من المدير", r.adminReplyText || "", location.href);
       }
 
-      // status transitions
       if(status !== lastStatus){
         lastStatus = status;
 
@@ -138,7 +127,6 @@
           pop();
           toast("تم قبول الاتصال", "سيتم فتح غرفة التواصل تلقائياً");
           notifyLocal("تم قبول الاتصال", "اضغط للدخول إلى الغرفة", `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`);
-          // auto jump
           setTimeout(()=>{
             location.href = `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`;
           }, 400);
@@ -147,15 +135,7 @@
         if(status === "rejected"){
           errorBeep();
           toast("تم رفض الطلب", "يمكنك إرسال طلب جديد");
-          notifyLocal("تم رفض الطلب", "يمكنك إرسال طلب جديد", location.href);
-          clearReq();
-        }
-
-        if(status === "closed"){
-          beep();
-          toast("انتهت الجلسة", "لو محتاج تواصل مرة أخرى، أرسل طلب جديد");
-          notifyLocal("انتهت الجلسة", "أرسل طلب جديد عند الحاجة", location.href);
-          clearReq();
+          statusBadge.textContent = "مرفوض";
         }
       }
 
@@ -170,7 +150,9 @@
       }
     });
   }
-  if(currentReqId) watch(currentReqId);
+
+  // ابدأ المراقبة فوراً بناءً على UID المستخدم المسجل
+  watch(user.uid);
 
   btnSend.addEventListener("click", async ()=>{
     btnSend.disabled = true;
@@ -179,19 +161,18 @@
       const ph = (phone.value||"").trim();
       const nt = (note.value||"").trim();
       if(!nt) throw new Error("اكتب وصف المشكلة.");
-      const res = await createRequest({
+      
+      await createRequest({
         createdByUid: user.uid,
         createdByType: "client",
-        displayName: user.displayName || user.email || "client",
+        displayName: user.displayName || user.email || "Client",
         email: user.email || "",
         phone: ph,
         note: nt
       });
-      currentReqId = res.reqId;
-      localStorage.setItem("clientReqId", currentReqId);
+      
       pop();
       toast("تم إرسال الطلب", "انتظر قبول المدير.");
-      watch(currentReqId);
     }catch(e){
       console.error(e);
       errorBeep();
@@ -203,15 +184,16 @@
     btnOffline.disabled = true;
     try{
       await primeAudio();
-      if(!currentReqId) throw new Error("أرسل طلباً أولاً.");
       const t = (offlineText.value||"").trim();
       if(!t) throw new Error("اكتب الرسالة.");
+      
       await sendOfflineMessage({
-        reqId: currentReqId,
+        reqId: user.uid, // نستخدم UID كمعرف للطلب
         fromUid: user.uid,
-        fromName: user.displayName || user.email || "client",
+        fromName: user.displayName || user.email || "Client",
         text: t
       });
+      
       offlineText.value = "";
       pop();
       toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");
