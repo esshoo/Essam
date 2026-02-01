@@ -1,23 +1,39 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Essam Support • Video</title>
-  <link rel="stylesheet" href="assets/styles.css"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Essam Support • Room</title>
   <meta name="theme-color" content="#0b1220" />
+  <link rel="stylesheet" href="assets/styles.css" />
+
+  <!-- PeerJS (نفس النسخة القديمة المستقرة) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+
   <style>
-    .vwrap{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
-    video{width:100%; background:#000; border-radius:14px; min-height:240px;}
-    .bar{display:flex; gap:10px; align-items:center; justify-content:space-between; margin:10px 0;}
-    .status{font-size:13px; opacity:.85}
-    @media (max-width: 900px){ .vwrap{grid-template-columns:1fr;} }
+    .layout{display:grid; grid-template-columns: 360px 1fr; gap:12px;}
+    .side{position:sticky; top:12px; height:calc(100vh - 24px); display:flex; flex-direction:column; gap:12px;}
+    .videos{display:grid; grid-template-columns:1fr; gap:10px;}
+    video{width:100%; background:#000; border-radius:14px; min-height:190px;}
+    .vlabel{font-size:12px; opacity:.85; margin-bottom:6px}
+    .chat{display:flex; flex-direction:column; height:calc(100vh - 24px);}
+    .chatlog{flex:1; overflow:auto; padding:10px; border-radius:14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08)}
+    .msg{padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.06); margin:8px 0; border:1px solid rgba(255,255,255,.06)}
+    .msg.me{background:rgba(120,210,255,.12); border-color:rgba(120,210,255,.18)}
+    .msg.system{background:rgba(255,209,139,.10); border-color:rgba(255,209,139,.20)}
+    .who{font-size:12px; opacity:.85; margin-bottom:6px}
+    .inputRow{display:flex; gap:10px; margin-top:10px; align-items:center}
+    .inputRow .input{flex:1}
+    .fileRow{display:flex; gap:10px; align-items:center; margin-top:10px}
+    .pill{font-size:12px; padding:4px 10px; border-radius:999px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10)}
+    @media (max-width: 980px){
+      .layout{grid-template-columns:1fr;}
+      .side{position:relative; height:auto}
+      .chat{height:auto}
+      .chatlog{height:420px}
+    }
   </style>
-
-  <!-- ✅ PeerJS library (لازم قبل أي كود يستخدم Peer) -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
-
 <body>
 <div class="container">
   <div class="header">
@@ -25,286 +41,440 @@
       <div class="logo"></div>
       <div>
         <h1 class="h1">غرفة التواصل</h1>
-        <div class="small" id="who"></div>
+        <div class="small" id="hdr"></div>
       </div>
     </div>
     <div class="row">
-      <button class="btn danger" id="btnLeave">إنهاء</button>
+      <span class="pill" id="status">...</span>
+      <button class="btn danger" id="btnEnd">إنهاء</button>
     </div>
   </div>
 
-  <div class="card">
-    <div class="bar">
-      <div class="status" id="status">جاري التحضير…</div>
-      <div class="status" id="roomInfo"></div>
-    </div>
-    <div class="vwrap">
-      <div>
-        <div class="small">الكاميرا (أنت)</div>
-        <video id="localVideo" autoplay playsinline muted></video>
+  <div class="layout">
+    <div class="side">
+      <div class="card">
+        <div class="title">الصوت/الفيديو</div>
+        <div class="small" id="roomInfo"></div>
+        <hr/>
+        <div class="videos">
+          <div>
+            <div class="vlabel" id="meLabel">أنت</div>
+            <video id="localVideo" autoplay playsinline muted></video>
+          </div>
+          <div>
+            <div class="vlabel" id="otherLabel">الطرف الآخر</div>
+            <video id="remoteVideo" autoplay playsinline></video>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" id="btnCallAudio">اتصال صوت</button>
+          <button class="btn" id="btnCallVideo">اتصال فيديو</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btnMic">كتم المايك</button>
+          <button class="btn" id="btnCam">إيقاف الكاميرا</button>
+        </div>
       </div>
-      <div>
-        <div class="small">الطرف الآخر</div>
-        <video id="remoteVideo" autoplay playsinline></video>
+
+      <div class="card">
+        <div class="title">إرسال ملفات</div>
+        <div class="small">صور/فيديو/أي ملف (عبر PeerJS DataChannel)</div>
+        <hr/>
+        <div class="fileRow">
+          <input type="file" id="fileInput" class="input" />
+          <button class="btn" id="btnSendFile">إرسال</button>
+        </div>
+        <div class="small" id="fileHint" style="margin-top:10px; opacity:.8">ملاحظة: الملفات الكبيرة جداً قد تفشل حسب الشبكة.</div>
       </div>
     </div>
 
-    <div class="bar" style="margin-top:12px">
-      <button class="btn" id="btnCam">إيقاف الكاميرا</button>
-      <button class="btn" id="btnMic">كتم المايك</button>
-      <button class="btn" id="btnRetry">إعادة المحاولة</button>
+    <div class="chat">
+      <div class="card" style="flex:1">
+        <div class="title">المحادثة</div>
+        <div class="small">رسائل فورية داخل الجلسة (ليست أوفلاين)</div>
+        <hr/>
+        <div class="chatlog" id="chatLog"></div>
+        <div class="inputRow">
+          <input class="input" id="chatText" placeholder="اكتب رسالة..." />
+          <button class="btn primary" id="btnSend">إرسال</button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="footer">لو لم يظهر الطرف الآخر: افتح الطرفين على نفس الغرفة وتأكد من صلاحيات rooms/peerIds في Rules.</div>
+  <div class="footer">إذا لم يتصل الطرف الآخر: افتح صفحة الغرفة عند الطرفين. الـ Peer ID هنا ثابت مثل النسخة القديمة.</div>
 </div>
 
 <script type="module">
   import { requireAuth } from "./assets/auth.js";
-  import { setMyPeerId, listenPeerIds } from "./assets/db.js";
+  import { isAdmin, closeRequestAsAdmin, listenRequest } from "./assets/db.js";
   import { db, ref, get } from "./assets/firebase.js";
-
-  const who = document.getElementById("who");
-  const statusEl = document.getElementById("status");
-  const roomInfo = document.getElementById("roomInfo");
-
-  const localVideo = document.getElementById("localVideo");
-  const remoteVideo = document.getElementById("remoteVideo");
-
-  const btnLeave = document.getElementById("btnLeave");
-  const btnCam = document.getElementById("btnCam");
-  const btnMic = document.getElementById("btnMic");
-  const btnRetry = document.getElementById("btnRetry");
+  import { toast } from "./assets/ui.js";
 
   const qs = new URLSearchParams(location.search);
   const roomId = qs.get("room") || "";
   const token = qs.get("token") || "";
 
+  const hdr = document.getElementById("hdr");
+  const statusEl = document.getElementById("status");
+  const roomInfo = document.getElementById("roomInfo");
+  const meLabel = document.getElementById("meLabel");
+  const otherLabel = document.getElementById("otherLabel");
+
+  const localVideo = document.getElementById("localVideo");
+  const remoteVideo = document.getElementById("remoteVideo");
+
+  const btnEnd = document.getElementById("btnEnd");
+  const btnCallAudio = document.getElementById("btnCallAudio");
+  const btnCallVideo = document.getElementById("btnCallVideo");
+  const btnMic = document.getElementById("btnMic");
+  const btnCam = document.getElementById("btnCam");
+
+  const chatLog = document.getElementById("chatLog");
+  const chatText = document.getElementById("chatText");
+  const btnSend = document.getElementById("btnSend");
+
+  const fileInput = document.getElementById("fileInput");
+  const btnSendFile = document.getElementById("btnSendFile");
+
   function setStatus(t){ statusEl.textContent = t; }
-  function fatal(msg){
-    setStatus("❌ " + msg);
-    throw new Error(msg);
+  function escapeHtml(s){ return String(s||"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+  function addMsg({ who, text, kind="msg" }){
+    const div = document.createElement("div");
+    div.className = `msg ${kind}`;
+    div.innerHTML = `<div class="who">${escapeHtml(who)}</div><div>${text}</div>`;
+    chatLog.appendChild(div);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  function redirectBack(user, admin){
+    if(admin) return location.replace("admin.html");
+    return location.replace(user.isAnonymous ? "guest.html" : "client.html");
   }
 
   if(!roomId || !token){
-    fatal("رابط الغرفة غير صحيح (room/token). ارجع لصفحة الطلب.");
+    toast("رابط غير صحيح", "ارجع لصفحة الطلب");
+    location.replace("index.html");
   }
 
-  // ✅ لازم Auth
+  // 1) Auth
   const user = await requireAuth("index.html");
-  who.textContent = `${user.displayName || user.email || user.uid} • UID: ${user.uid}`;
+  const admin = await isAdmin(user.uid, user.email || "");
+
+  // 2) Validate request/token
+  const snap = await get(ref(db, `requests/${roomId}`));
+  if(!snap.exists()){
+    toast("الغرفة غير موجودة", "الطلب غير موجود");
+    redirectBack(user, admin);
+  }
+  const req = snap.val();
+  if(String(req.roomToken||"") !== String(token)){
+    toast("Token غير صحيح", "قد تكون الجلسة انتهت");
+    redirectBack(user, admin);
+  }
+  if(String(req.status||"") !== "accepted"){
+    toast("الجلسة غير متاحة", `الحالة الحالية: ${req.status||"—"}`);
+    redirectBack(user, admin);
+  }
+
+  const clientName = (req.displayName || req.email || req.createdByUid || "Client");
+  const adminName = (user.displayName || user.email || "Admin");
+  const myName = admin ? adminName : (user.displayName || user.email || clientName || "User");
+  const otherName = admin ? clientName : "الدعم";
+
+  hdr.textContent = `${admin ? "مدير" : "عميل"} • ${myName}`;
   roomInfo.textContent = `Room: ${roomId}`;
+  meLabel.textContent = `أنت (${myName})`;
+  otherLabel.textContent = `الطرف الآخر (${otherName})`;
 
-  // ✅ تحقق من التوكن (roomId عندك = reqId)
-  const reqSnap = await get(ref(db, `requests/${roomId}`));
-  if(!reqSnap.exists()) fatal("الغرفة غير موجودة.");
-  const req = reqSnap.val();
-  if(String(req.roomToken || "") !== String(token)) fatal("Token غير صحيح.");
+  // Listen for request state changes (close, revoke token, etc.)
+  listenRequest(roomId, (r)=>{
+    if(!r) return;
+    if(r.status === "closed" || r.status === "ended" || !r.roomToken){
+      addMsg({ who: "النظام", text: "تم إنهاء الجلسة.", kind: "system" });
+      setTimeout(()=>redirectBack(user, admin), 600);
+    }
+  });
 
-  // ✅ تحضير Media
+  // 3) PeerJS stable IDs (مثل النسخة القديمة)
+  if(!window.Peer){
+    toast("PeerJS غير متاح", "تأكد من عدم حجب cdnjs");
+    redirectBack(user, admin);
+  }
+
+  const cleanRoom = String(roomId).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32) || "room";
+  const myPeerId = (admin ? "admin_" : "client_") + cleanRoom;
+  const otherPeerId = (admin ? "client_" : "admin_") + cleanRoom;
+
+  let peer = null;
+  let conn = null;
+  let call = null;
   let localStream = null;
-  async function ensureMedia(){
-    if(localStream) return localStream;
-    setStatus("🎥 طلب إذن الكاميرا والمايك…");
-    localStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-    localVideo.srcObject = localStream;
+  let micMuted = false;
+  let camOff = false;
+
+  async function ensureMedia({ video }){
+    if(localStream){
+      // if we only had audio before and now want video, try upgrade
+      const hasVideo = localStream.getVideoTracks().some(t=>t.readyState === "live");
+      if(video && !hasVideo){
+        localStream.getTracks().forEach(t=>t.stop());
+        localStream = null;
+      }
+    }
+    if(!localStream){
+      localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video: !!video });
+      localVideo.srcObject = localStream;
+    }
     return localStream;
   }
 
-  // ✅ PeerJS
-  if(!window.Peer){
-    fatal("PeerJS لم يتم تحميله. تأكد أن الرابط يعمل بدون حجب.");
-  }
-
-  let peer = null;
-  let myPeerId = "";
-  let currentCall = null;
-  let connectedTo = ""; // other peerId
-  let unsubPeerIds = null;
-  let peerReady = false;
-  let pendingPeerMap = null;
-
-  function cleanupCall(){
-    try{ currentCall?.close(); }catch{}
-    currentCall = null;
-    connectedTo = "";
+  function closeCall(){
+    try{ call?.close(); }catch{}
+    call = null;
     remoteVideo.srcObject = null;
   }
 
-  function attachPeerHandlersOnce(){
-    if(!peer || peer.__handlersAttached) return;
-    peer.__handlersAttached = true;
-
-    peer.on("call", async (call) => {
-      try{
-        setStatus("📞 اتصال وارد…");
-        const stream = await ensureMedia();
-        cleanupCall();
-        currentCall = call;
-
-        call.on("stream", (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
-          setStatus("✅ متصل (Inbound)");
-        });
-
-        call.on("close", () => {
-          setStatus("⛔ تم إنهاء الاتصال.");
-          cleanupCall();
-        });
-
-        call.on("error", (e) => {
-          console.error(e);
-          setStatus("⚠️ خطأ في الاتصال.");
-        });
-
-        call.answer(stream);
-      }catch(e){
-        console.error(e);
-        setStatus("⚠️ تعذر الرد على الاتصال.");
-      }
-    });
-
-    peer.on("disconnected", () => setStatus("⚠️ تم فصل Peer…"));
-    peer.on("error", (e) => {
-      console.error(e);
-      setStatus("⚠️ Peer Error: " + (e?.type || e?.message || "unknown"));
-    });
+  function closeConn(){
+    try{ conn?.close(); }catch{}
+    conn = null;
   }
 
-  async function startPeer(){
-    setStatus("🔌 إنشاء Peer…");
-    peer = new Peer(undefined, { debug: 2 });
+  function system(text){ addMsg({ who: "النظام", text: escapeHtml(text), kind:"system"}); }
 
-    attachPeerHandlersOnce();
-
-    await new Promise((resolve, reject)=>{
-      peer.on("open", async (id)=>{
-        try{
-          myPeerId = id;
-          peerReady = true;
-          setStatus("✅ Peer جاهز: " + id);
-
-          // ✅ سجل peerId في RTDB (ده اللي كان بيتسبب permission_denied قبل تعديل rules)
-          await setMyPeerId(roomId, user.uid, id);
-
-          // لو وصلتنا peerIds قبل ما peer يبقى جاهز
-          if(pendingPeerMap){
-            handlePeerMap(pendingPeerMap);
-            pendingPeerMap = null;
-          }
-
-          resolve();
-        }catch(e){
-          reject(e);
-        }
-      });
-    });
-  }
-
-  async function callPeer(otherPeerId){
-    if(!peerReady || !peer) return;
-    if(!otherPeerId) return;
-    if(connectedTo === otherPeerId) return;
-
+  async function endSession(reason="ended"){
     try{
-      const stream = await ensureMedia();
-      setStatus("📡 جاري الاتصال بالطرف الآخر…");
-      cleanupCall();
+      // notify other
+      try{ conn?.send({ type:"session-end", reason }); }catch{}
+      closeCall();
+      closeConn();
+      try{ peer?.disconnect(); peer?.destroy(); }catch{}
 
-      connectedTo = otherPeerId;
-      const call = peer.call(otherPeerId, stream);
-      currentCall = call;
-
-      call.on("stream", (remoteStream)=>{
-        remoteVideo.srcObject = remoteStream;
-        setStatus("✅ متصل (Outbound)");
-      });
-      call.on("close", ()=>{
-        setStatus("⛔ تم إنهاء الاتصال.");
-        cleanupCall();
-      });
-      call.on("error", (e)=>{
-        console.error(e);
-        setStatus("⚠️ خطأ أثناء الاتصال.");
-      });
+      if(admin){
+        // admin seals the session in DB so link becomes invalid
+        await closeRequestAsAdmin({ reqId: roomId, adminUid: user.uid, reason });
+      }
     }catch(e){
       console.error(e);
-      setStatus("⚠️ تعذر بدء الاتصال.");
     }
   }
 
-  function pickOtherPeerId(map){
-    // map: { uid: peerId, ... } حسب db.js
-    const entries = Object.entries(map || {});
-    for(const [uid, pid] of entries){
-      if(uid !== user.uid && pid) return pid;
-    }
-    return "";
-  }
-
-  function handlePeerMap(map){
-    // ⚠️ مهم: قبل ما peer يبقى جاهز، ما نناديش peer.on/peer.call
-    if(!peerReady || !peer){
-      pendingPeerMap = map;
-      return;
-    }
-    const other = pickOtherPeerId(map);
-    if(other) callPeer(other);
-    else setStatus("⌛ في انتظار الطرف الآخر…");
-  }
-
-  function startPeerIdsListener(){
-    if(unsubPeerIds) try{ unsubPeerIds(); }catch{}
-    unsubPeerIds = listenPeerIds(roomId, (map)=>{
-      handlePeerMap(map);
-    });
-  }
-
-  // ===== UI Buttons =====
-  btnLeave.addEventListener("click", ()=>{
-    try{
-      cleanupCall();
-      peer?.destroy();
-      localStream?.getTracks()?.forEach(t=>t.stop());
-    }catch{}
-    location.replace("index.html");
-  });
-
-  btnCam.addEventListener("click", ()=>{
-    if(!localStream) return;
-    const v = localStream.getVideoTracks()[0];
-    if(!v) return;
-    v.enabled = !v.enabled;
-    btnCam.textContent = v.enabled ? "إيقاف الكاميرا" : "تشغيل الكاميرا";
+  btnEnd.addEventListener("click", async ()=>{
+    btnEnd.disabled = true;
+    system("جاري إنهاء الجلسة...");
+    await endSession("left");
+    redirectBack(user, admin);
   });
 
   btnMic.addEventListener("click", ()=>{
     if(!localStream) return;
-    const a = localStream.getAudioTracks()[0];
-    if(!a) return;
-    a.enabled = !a.enabled;
-    btnMic.textContent = a.enabled ? "كتم المايك" : "تشغيل المايك";
+    micMuted = !micMuted;
+    localStream.getAudioTracks().forEach(t=>t.enabled = !micMuted);
+    btnMic.textContent = micMuted ? "إلغاء كتم" : "كتم المايك";
   });
 
-  btnRetry.addEventListener("click", async ()=>{
-    setStatus("🔁 إعادة المحاولة…");
+  btnCam.addEventListener("click", ()=>{
+    if(!localStream) return;
+    camOff = !camOff;
+    localStream.getVideoTracks().forEach(t=>t.enabled = !camOff);
+    btnCam.textContent = camOff ? "تشغيل الكاميرا" : "إيقاف الكاميرا";
+  });
+
+  function setupConn(c){
+    conn = c;
+    setStatus("✅ متصل");
+    system("تم اتصال البيانات");
+
+    conn.on("open", ()=>{
+      try{ conn.send({ type:"hello", name: myName, isAdmin: admin }); }catch{}
+    });
+
+    conn.on("data", async (data)=>{
+      try{
+        if(!data || typeof data !== "object") return;
+        if(data.type === "hello"){
+          const n = data.name || otherName;
+          otherLabel.textContent = `الطرف الآخر (${n})`;
+          system(`اتصل: ${n}`);
+          return;
+        }
+        if(data.type === "chat"){
+          addMsg({ who: data.name || otherName, text: escapeHtml(data.text), kind:"" });
+          return;
+        }
+        if(data.type === "file"){
+          const name = data.name || "file";
+          const mime = data.mime || "application/octet-stream";
+          const buf = data.buf;
+          const blob = new Blob([buf], { type: mime });
+          const url = URL.createObjectURL(blob);
+          const safe = escapeHtml(name);
+          addMsg({
+            who: data.from || otherName,
+            text: `<a class="btn" href="${url}" download="${safe}">تحميل: ${safe}</a>`,
+            kind:""
+          });
+          return;
+        }
+        if(data.type === "session-end"){
+          system("الطرف الآخر أنهى الجلسة.");
+          await endSession("peer-ended");
+          redirectBack(user, admin);
+          return;
+        }
+      }catch(e){
+        console.error(e);
+      }
+    });
+
+    conn.on("close", async ()=>{
+      setStatus("⚠️ انقطع الاتصال");
+      system("تم فصل الاتصال");
+      closeCall();
+      if(admin){
+        // لو انقطع بدون إنهاء، اقفل الجلسة لحماية الرابط
+        await closeRequestAsAdmin({ reqId: roomId, adminUid: user.uid, reason: "disconnect" }).catch(()=>{});
+      }
+    });
+
+    conn.on("error", (e)=>{
+      console.error(e);
+      setStatus("⚠️ خطأ اتصال");
+    });
+  }
+
+  function setupPeer(){
+    setStatus("⏳ تهيئة الاتصال...");
+    peer = new Peer(myPeerId, { debug: 2 });
+
+    peer.on("open", ()=>{
+      setStatus("⌛ في انتظار الطرف الآخر...");
+      system(`Peer Ready: ${myPeerId}`);
+
+      // admin يحاول الاتصال تلقائياً (والعميل أيضاً كنسخة احتياطية)
+      if(admin){
+        connectWithRetry();
+      }else{
+        // بعد ثانيتين، العميل يحاول برضو لو الأدمن ما اتصلش
+        setTimeout(()=>{ if(!conn) connectWithRetry(); }, 2000);
+      }
+    });
+
+    peer.on("connection", (c)=>{
+      system("اتصال وارد...");
+      setupConn(c);
+    });
+
+    peer.on("call", async (incoming)=>{
+      try{
+        const wantsVideo = true;
+        const stream = await ensureMedia({ video: wantsVideo });
+        closeCall();
+        call = incoming;
+        incoming.answer(stream);
+        incoming.on("stream", (rs)=>{ remoteVideo.srcObject = rs; setStatus("✅ متصل (Call)"); });
+        incoming.on("close", ()=>{ system("تم إنهاء المكالمة"); closeCall(); });
+        incoming.on("error", (e)=>{ console.error(e); system("خطأ مكالمة"); });
+      }catch(e){
+        console.error(e);
+        system("تعذر الرد على المكالمة");
+      }
+    });
+
+    peer.on("error", (e)=>{
+      console.error(e);
+      setStatus("⚠️ Peer Error");
+      system(e?.type || e?.message || "peer error");
+    });
+  }
+
+  function connectWithRetry(){
+    let tries = 0;
+    const maxTries = 25;
+
+    const tick = ()=>{
+      tries++;
+      if(conn && conn.open) return;
+      if(tries > maxTries){
+        setStatus("❌ لم يتم الاتصال");
+        system("تعذر الاتصال بالطرف الآخر. تأكد أنه فتح نفس رابط الغرفة.");
+        return;
+      }
+
+      try{
+        setStatus("📡 محاولة اتصال...");
+        const c = peer.connect(otherPeerId, { reliable: true });
+        c.on("open", ()=> setupConn(c));
+        c.on("error", ()=>{ setTimeout(tick, 800); });
+      }catch{
+        setTimeout(tick, 800);
+      }
+    };
+
+    tick();
+  }
+
+  async function startCall(video){
+    if(!conn || !conn.open){
+      toast("غير متصل", "انتظر اتصال الطرف الآخر أولاً");
+      return;
+    }
     try{
-      cleanupCall();
-      peer?.destroy();
-      peerReady = false;
-      peer = null;
-      await startPeer();
+      const stream = await ensureMedia({ video });
+      closeCall();
+      call = peer.call(otherPeerId, stream);
+      call.on("stream", (rs)=>{ remoteVideo.srcObject = rs; setStatus("✅ متصل (Call)"); });
+      call.on("close", ()=>{ system("تم إنهاء المكالمة"); closeCall(); });
+      call.on("error", (e)=>{ console.error(e); system("خطأ مكالمة"); });
     }catch(e){
       console.error(e);
-      setStatus("⚠️ فشلت إعادة المحاولة.");
+      toast("تعذر بدء المكالمة", e?.message || "");
+    }
+  }
+
+  btnCallAudio.addEventListener("click", ()=> startCall(false));
+  btnCallVideo.addEventListener("click", ()=> startCall(true));
+
+  function sendChat(){
+    const t = (chatText.value||"").trim();
+    if(!t) return;
+    if(!conn || !conn.open){
+      toast("غير متصل", "لا يوجد اتصال بيانات");
+      return;
+    }
+    conn.send({ type:"chat", name: myName, text: t });
+    addMsg({ who: myName, text: escapeHtml(t), kind:"me" });
+    chatText.value = "";
+  }
+
+  btnSend.addEventListener("click", sendChat);
+  chatText.addEventListener("keydown", (e)=>{ if(e.key === "Enter") sendChat(); });
+
+  btnSendFile.addEventListener("click", async ()=>{
+    if(!conn || !conn.open){
+      toast("غير متصل", "لا يوجد اتصال بيانات");
+      return;
+    }
+    const f = fileInput.files && fileInput.files[0];
+    if(!f){ toast("اختر ملف", ""); return; }
+
+    btnSendFile.disabled = true;
+    try{
+      const buf = await f.arrayBuffer();
+      conn.send({ type:"file", from: myName, name: f.name, mime: f.type || "application/octet-stream", buf });
+      addMsg({ who: myName, text: `📎 ${escapeHtml(f.name)}`, kind:"me" });
+      fileInput.value = "";
+    }catch(e){
+      console.error(e);
+      toast("فشل إرسال الملف", e?.message || "");
+    }finally{
+      btnSendFile.disabled = false;
     }
   });
 
-  // ===== Boot =====
-  setStatus("⏳ بدء الاتصال…");
-  await ensureMedia();
-  await startPeer();
-  startPeerIdsListener();
+  // Start
+  system(`جاري تهيئة الاتصال... (${admin ? "admin" : "client"})`);
+  setupPeer();
 </script>
 </body>
 </html>

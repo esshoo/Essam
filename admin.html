@@ -38,23 +38,25 @@
     </div>
 
     <div class="card">
-      <div class="title">رسائل أوفلاين</div>
-      <div class="small">اضغط "رسائل" بجوار أي طلب لعرض رسائله تلقائيًا.</div>
+      <div class="title">رسائل العملاء (الأوفلاين)</div>
+      <div class="small">تظهر تلقائيًا (مثل النسخة القديمة). ويمكنك أيضاً عرض رسائل طلب محدد.</div>
+      <hr/>
+      <div class="list" id="globalMsgs"></div>
       <hr/>
       <div class="row">
         <input class="input" id="reqIdForMsgs" placeholder="Request ID" />
-        <button class="btn" id="btnLoadMsgs">عرض</button>
+        <button class="btn" id="btnLoadMsgs">عرض رسائل هذا الطلب</button>
       </div>
-      <div class="chatlog" id="msgsBox" style="height:360px; margin-top:12px"></div>
+      <div class="chatlog" id="msgsBox" style="height:240px; margin-top:12px"></div>
     </div>
   </div>
 
-  <div class="footer">لو واجهت مشكلة اتصال داخل الغرفة: تأكد من Rules الخاصة بـ rooms/peerIds.</div>
+  <div class="footer">ملاحظة: الاتصال الصوت/فيديو يتم عبر PeerJS. لو واجهت مشكلة، جرّب شبكة مختلفة أو افتح الموقع بدون VPN.</div>
 </div>
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, listenPendingRequests, acceptRequest, rejectRequest, listenOfflineMessagesForRequest } from "./assets/db.js";
+  import { isAdmin, listenPendingRequests, acceptRequest, rejectRequest, listenOfflineMessagesForRequest, listenGlobalMessages } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton } from "./assets/notifications.js";
 
@@ -65,6 +67,7 @@
   const reqIdForMsgs = document.getElementById("reqIdForMsgs");
   const btnLoadMsgs = document.getElementById("btnLoadMsgs");
   const msgsBox = document.getElementById("msgsBox");
+  const globalMsgs = document.getElementById("globalMsgs");
 
   let unsubMsgs = null;
 
@@ -103,6 +106,34 @@
       msgsBox.scrollTop = msgsBox.scrollHeight;
     });
   }
+
+  // ✅ رسائل عامة تظهر فوراً (زي المشروع القديم)
+  listenGlobalMessages((items)=>{
+    if(!items.length){
+      globalMsgs.innerHTML = '<div class="small">لا توجد رسائل بعد.</div>';
+      return;
+    }
+    globalMsgs.innerHTML = items.slice(0, 20).map(m=>`
+      <div class="item">
+        <div class="meta">
+          <div class="title">${(m.name||"بدون اسم").replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>
+          <div class="sub">${(m.type||"")} • ${(m.contact||"")} • ${new Date(m.timestamp||Date.now()).toLocaleString()}</div>
+          <div class="sub">${String(m.content||"").slice(0,200).replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>
+          ${m.reqId ? `<div class="sub">Request: <b>${m.reqId}</b></div>` : ``}
+        </div>
+        <div class="row">
+          ${m.reqId ? `<button class="btn" data-req="${m.reqId}">فتح</button>` : ``}
+        </div>
+      </div>
+    `).join("");
+
+    globalMsgs.querySelectorAll("button[data-req]").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const id = btn.getAttribute("data-req");
+        renderMsgs(id);
+      });
+    });
+  });
 
   btnLoadMsgs.addEventListener("click", ()=>{
     const id = (reqIdForMsgs.value||"").trim();

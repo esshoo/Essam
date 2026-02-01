@@ -61,7 +61,7 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, pushGlobalMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton } from "./assets/notifications.js";
 
@@ -109,6 +109,9 @@
           <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
         </div>`;
       }
+      if(r.status === "closed"){
+        reqInfo.innerHTML += `<div class="small" style="margin-top:10px; color:#ffd18b">انتهت الجلسة. لو محتاج تواصل مرة أخرى، أرسل طلب جديد.</div>`;
+      }
       if(r.status === "rejected"){
         reqInfo.innerHTML += `<div class="small" style="margin-top:10px; color:#ff9aa5">تم رفض الطلب.</div>`;
       }
@@ -151,6 +154,15 @@
         fromUid: user.uid,
         fromName: user.displayName || user.email || "client",
         text: t
+      });
+      // ✅ Feed عام للأدمن (زي المشروع القديم)
+      await pushGlobalMessage({
+        reqId: currentReqId,
+        fromUid: user.uid,
+        name: user.displayName || "",
+        contact: user.email || "",
+        type: "Google User",
+        content: t
       });
       offlineText.value = "";
       toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");

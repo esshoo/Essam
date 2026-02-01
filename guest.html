@@ -34,6 +34,8 @@
       <div class="title">إرسال طلب دعم كضيف</div>
       <div class="small">املأ رقم الهاتف والملاحظة (اختياري الهاتف).</div>
       <hr/>
+    <div class="label">الاسم (مطلوب)</div>
+    <input class="input" id="guestName" placeholder="اكتب اسمك" />
       <div class="label">رقم الهاتف (اختياري)</div>
       <input class="input" id="phone" placeholder="05xxxxxxxx" />
       <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
@@ -61,7 +63,7 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, pushGlobalMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton } from "./assets/notifications.js";
 
@@ -69,6 +71,7 @@
   const btnLogout = document.getElementById("btnLogout");
   const btnSwitch = document.getElementById("btnSwitch");
   const btnSend = document.getElementById("btnSend");
+  const guestName = document.getElementById("guestName");
   const phone = document.getElementById("phone");
   const note = document.getElementById("note");
   const statusBadge = document.getElementById("statusBadge");
@@ -84,7 +87,9 @@
   // ✅ لو مش anonymous يبقى عميل
   if (!user.isAnonymous) location.replace("client.html");
 
-  who.textContent = `Guest UID: ${user.uid}`;
+  const savedName = localStorage.getItem("guestName") || "";
+  if(savedName) guestName.value = savedName;
+  who.textContent = savedName ? `مرحباً ${savedName}` : `Guest UID: ${user.uid}`;
 
   await initMessaging();
   wireNotificationButton("#btnEnableNotifs");
@@ -115,6 +120,9 @@
           <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
         </div>`;
       }
+      if(r.status === "closed"){
+        reqInfo.innerHTML += `<div class="small" style="margin-top:10px; color:#ffd18b">انتهت الجلسة. لو محتاج تواصل مرة أخرى، أرسل طلب جديد.</div>`;
+      }
       if(r.status === "rejected"){
         reqInfo.innerHTML += `<div class="small" style="margin-top:10px; color:#ff9aa5">تم رفض الطلب.</div>`;
       }
@@ -125,13 +133,18 @@
   btnSend.addEventListener("click", async ()=>{
     btnSend.disabled = true;
     try{
+      const n = (guestName.value||"").trim();
+      if(!n) throw new Error("اكتب اسمك.");
+      localStorage.setItem("guestName", n);
+      who.textContent = `مرحباً ${n}`;
+
       const ph = (phone.value||"").trim();
       const nt = (note.value||"").trim();
       if(!nt) throw new Error("اكتب وصف المشكلة.");
       const res = await createRequest({
         createdByUid: user.uid,
         createdByType: "guest",
-        displayName: "Guest",
+        displayName: n,
         email: "",
         phone: ph,
         note: nt
@@ -152,11 +165,20 @@
       if(!currentReqId) throw new Error("أرسل طلباً أولاً.");
       const t = (offlineText.value||"").trim();
       if(!t) throw new Error("اكتب الرسالة.");
+      const n = (guestName.value||localStorage.getItem("guestName")||"guest").trim();
       await sendOfflineMessage({
         reqId: currentReqId,
         fromUid: user.uid,
-        fromName: "guest",
+        fromName: n,
         text: t
+      });
+      await pushGlobalMessage({
+        reqId: currentReqId,
+        fromUid: user.uid,
+        name: n,
+        contact: "",
+        type: "Guest",
+        content: t
       });
       offlineText.value = "";
       toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");

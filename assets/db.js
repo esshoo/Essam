@@ -118,6 +118,63 @@ export async function rejectRequest({ reqId, adminUid }) {
   });
 }
 
+/**
+ * Close a request/session (admin only).
+ * Clears room token so the room can't be reopened without a new request.
+ */
+export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" }) {
+  if (!reqId) throw new Error("closeRequestAsAdmin: reqId is required");
+  if (!adminUid) throw new Error("closeRequestAsAdmin: adminUid is required");
+
+  const endedAt = Date.now();
+  const updates = {};
+  updates[`requests/${reqId}/status`] = "closed";
+  updates[`requests/${reqId}/endedAt`] = endedAt;
+  updates[`requests/${reqId}/endedBy`] = adminUid;
+  updates[`requests/${reqId}/endReason`] = reason;
+  updates[`requests/${reqId}/roomId`] = "";
+  updates[`requests/${reqId}/roomToken`] = "";
+
+  updates[`rooms/${reqId}/active`] = false;
+  updates[`rooms/${reqId}/endedAt`] = endedAt;
+  updates[`rooms/${reqId}/endedBy`] = adminUid;
+  updates[`rooms/${reqId}/endReason`] = reason;
+
+  await update(ref(db), updates);
+}
+
+export function listenRequest(reqId, cb) {
+  if (!reqId) throw new Error("listenRequest: reqId is required");
+  return onValue(ref(db, `requests/${reqId}`), (snap) => cb(snap.exists() ? snap.val() : null));
+}
+
+/**
+ * Global offline messages feed (similar to the old project).
+ * Admin reads this to see messages immediately without typing reqId.
+ */
+export async function pushGlobalMessage({ reqId, fromUid, name, contact, type, content }) {
+  const mref = push(ref(db, `messages`));
+  await set(mref, {
+    reqId: reqId || "",
+    fromUid: fromUid || "",
+    name: name || "",
+    contact: contact || "",
+    type: type || "",
+    content: content || "",
+    timestamp: Date.now()
+  });
+}
+
+export function listenGlobalMessages(cb) {
+  // latest first (simple)
+  return onValue(ref(db, `messages`), (snap) => {
+    const out = [];
+    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
+    out.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    cb(out);
+  });
+}
+
 export async function sendOfflineMessage({ reqId, fromUid, fromName, text }) {
   if (!reqId) throw new Error("sendOfflineMessage: reqId is required");
 
