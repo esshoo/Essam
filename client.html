@@ -1,23 +1,100 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<title>Essam Support • Client</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1 class="h1">العميل</h1>
+        <div class="small" id="who"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
+      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="title">إرسال طلب دعم</div>
+      <div class="small">املأ البيانات ثم اضغط إرسال.</div>
+      <hr/>
+      <div class="label">رقم الهاتف (اختياري)</div>
+      <input class="input" id="phone" placeholder="05xxxxxxxx" />
+      <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
+      <textarea class="input" id="note" rows="4" placeholder="اكتب وصف مختصر للمشكلة..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnSend">إرسال الطلب</button>
+        <span class="badge" id="statusBadge">جاهز</span>
+      </div>
+      <div class="small" id="reqInfo" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="title">رسالة أوفلاين</div>
+      <div class="small">إذا لم تكن الجلسة متاحة، اترك رسالة للمدير.</div>
+      <hr/>
+      <textarea class="input" id="offlineText" rows="6" placeholder="اكتب رسالتك..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
+      </div>
+      <div class="small">ستظهر هذه الرسالة للمدير في لوحة التحكم.</div>
+    </div>
+  </div>
+
+  <div class="footer">بعد قبول الطلب ستظهر لك زر الدخول إلى غرفة التواصل.</div>
+</div>
+
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  // ✅ تم التصحيح هنا
   import { isAdmin, createRequest, listenRequest, sendOfflineMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
-  // ... (بقية الاستيرادات)
+  import { initMessaging, wireNotificationButton } from "./assets/notifications.js";
+  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
 
   const user = await requireAuth("index.html");
+  if (await isAdmin(user.uid, user.email || "")) location.replace("admin.html");
 
-  function watch(uid){
-    if(!uid) return;
-    statusBadge.textContent = "جارٍ المتابعة…";
-    // ✅ استدعاء الدالة الصحيحة
-    listenRequest(uid, (r) => {
-      if(!r) return;
-      // ... (منطق التعامل مع الحالة)
-      const status = r.status || "—";
-      statusBadge.textContent = status;
-    });
-  }
-  watch(user.uid);
-  // ... (بقية الكود)
+  document.getElementById("who").textContent = `مرحباً ${user.displayName || user.email || user.uid}`;
+  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
+  try { await initMessaging(); } catch {}
+  wireNotificationButton("#btnEnableNotifs");
+
+  // مراقبة حالة الطلب بالـ UID الثابت
+  listenRequest(user.uid, (r) => {
+    if(!r) return;
+    const badge = document.getElementById("statusBadge");
+    badge.textContent = r.status;
+    if(r.status === "accepted") {
+      pop();
+      location.href = `video.html?room=${r.roomId}&token=${r.roomToken}`;
+    }
+  });
+
+  document.getElementById("btnSend").addEventListener("click", async () => {
+    try {
+      await createRequest({
+        createdByUid: user.uid,
+        createdByType: "client",
+        note: document.getElementById("note").value
+      });
+      pop(); toast("تم الإرسال");
+    } catch(e) { errorBeep(); }
+  });
 </script>
+</body>
+</html>
