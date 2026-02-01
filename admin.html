@@ -68,12 +68,13 @@
   import { requireAuth, logout } from "./assets/auth.js";
   import {
     isAdmin,
-    listenPendingRequests,
+    listenAllRequests,
     acceptRequest,
     rejectRequest,
     listenOfflineMessagesForRequest,
-    listenRequestsWithOffline,
+    listenOfflineThreadsAdmin,
     clearOfflineMessagesAsAdmin,
+    deleteOfflineMessageAsAdmin,
     sendAdminReply
   } from "./assets/db.js";
   import { toast, fmtTime, escapeHtml } from "./assets/ui.js";
@@ -177,7 +178,12 @@
     });
   }
 
-  listenPendingRequests((items)=>{
+  let requestMap = new Map();
+
+  listenAllRequests((all)=>{
+    requestMap = new Map(all.map(r=>[r.id, r]));
+    const items = all.filter(r=> (r.status||"") === "pending");
+
     // detect new pending
     const ids = new Set(items.map(x=>x.id));
     const newOnes = items.filter(x=>!seenPending.has(x.id));
@@ -191,6 +197,7 @@
     seenPending = ids;
     renderPending(items);
   });
+
 
   // ---------- Offline inbox ----------
   let seenOffline = new Set();
@@ -247,10 +254,26 @@
         const el = document.createElement("div");
         el.className = "msg";
         const who = m.fromName || m.fromUid || "—";
-        el.innerHTML = `<div class="who">${escapeHtml(who)} • ${fmtTime(m.createdAt||0)}</div><div>${escapeHtml(m.text||"")}</div>`;
+        el.innerHTML = `<div class="who">${escapeHtml(who)} • ${fmtTime(m.createdAt||0)} <button class="btn danger mini" data-del="${m.id}">حذف</button></div><div>${escapeHtml(m.text||"")}</div>`;
         msgsBox.appendChild(el);
       }
-      msgsBox.scrollTop = msgsBox.scrollHeight;
+      // wire delete buttons
+      msgsBox.querySelectorAll("button[data-del]").forEach((btn)=>{
+        btn.addEventListener("click", async ()=>{
+          const mid = btn.getAttribute("data-del");
+          btn.disabled = true;
+          try{
+            await deleteOfflineMessageAsAdmin(reqId, mid);
+            toast("تم الحذف", "تم حذف الرسالة");
+          }catch(e){
+            console.error(e);
+            toast("خطأ", e?.message || "تعذر حذف الرسالة");
+          }finally{
+            btn.disabled = false;
+          }
+        });
+      });
+msgsBox.scrollTop = msgsBox.scrollHeight;
     });
   }
 
@@ -297,7 +320,20 @@
     }
   });
 
-  listenRequestsWithOffline((items)=>{
+  listenOfflineThreadsAdmin((threads)=>{
+    // Merge with request info so names show even if lastOffline* wasn't updated
+    const items = threads.map(th=>{
+      const r = requestMap.get(th.reqId) || {};
+      const lastAt = (th.last?.createdAt || r.lastOfflineAt || 0);
+      return {
+        id: th.reqId,
+        ...r,
+        lastOfflineAt: lastAt,
+        lastOfflineFrom: (th.last?.fromName || th.last?.fromUid || r.lastOfflineFrom || ""),
+        lastOfflineText: String(th.last?.text || r.lastOfflineText || "").slice(0, 120)
+      };
+    }).filter(x=> (x.lastOfflineAt||0) > 0);
+
     const ids = new Set(items.map(x=>x.id));
     const newOnes = items.filter(x=>!seenOffline.has(x.id));
     if(seenOffline.size && newOnes.length){
@@ -307,6 +343,7 @@
     seenOffline = ids;
     renderThreads(items);
   });
+
 
 </script>
 </body>

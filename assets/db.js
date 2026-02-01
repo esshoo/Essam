@@ -1,3 +1,37 @@
+export function listenAllRequests(cb){
+  return onValue(ref(db, "requests"), (snap)=>{
+    const out = [];
+    snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
+    out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+    cb(out);
+  });
+}
+
+export function listenOfflineThreadsAdmin(cb){
+  // Admin-only listing of /offlineMessages to avoid relying on lastOfflineAt updates.
+  return onValue(ref(db, "offlineMessages"), (snap)=>{
+    const threads = [];
+    snap.forEach((threadSnap)=>{
+      let last = null;
+      threadSnap.forEach((m)=>{
+        const v = m.val();
+        if(!last || (v?.createdAt||0) > (last.createdAt||0)){
+          last = { id: m.key, ...(v||{}) };
+        }
+      });
+      threads.push({ reqId: threadSnap.key, last });
+    });
+    threads.sort((a,b)=> ((b.last?.createdAt)||0) - ((a.last?.createdAt)||0));
+    cb(threads);
+  });
+}
+
+export async function deleteOfflineMessageAsAdmin(reqId, msgId){
+  if(!reqId) throw new Error("deleteOfflineMessageAsAdmin: reqId is required");
+  if(!msgId) throw new Error("deleteOfflineMessageAsAdmin: msgId is required");
+  await remove(ref(db, `offlineMessages/${reqId}/${msgId}`));
+}
+
 import {
   db, ref, get, set, push, update,
   onValue, query, orderByChild, equalTo, startAt, limitToLast, remove
@@ -199,12 +233,16 @@ export function listenRequestsWithOffline(cb){
 
 export async function clearOfflineMessagesAsAdmin(reqId){
   if(!reqId) throw new Error("clearOfflineMessagesAsAdmin: reqId is required");
-  // delete thread + clear summary fields so it disappears from the admin inbox
+  // Delete the whole thread (admin only, enforced by rules)
   await remove(ref(db, `offlineMessages/${reqId}`));
+  // Clear summary fields so it disappears from the admin inbox
   await update(ref(db), {
     [`requests/${reqId}/lastOfflineAt`]: 0,
     [`requests/${reqId}/lastOfflineFrom`]: "",
-    [`requests/${reqId}/lastOfflineText`]: ""
+    [`requests/${reqId}/lastOfflineText`]: "",
+    [`requests/${reqId}/adminReplyAt`]: 0,
+    [`requests/${reqId}/adminReplyText`]: "",
+    [`requests/${reqId}/adminReplyBy`]: ""
   });
 }
 
@@ -213,10 +251,27 @@ export async function sendAdminReply({ reqId, adminUid, text }){
   if(!adminUid) throw new Error("sendAdminReply: adminUid is required");
   const t = (text||"").trim();
   if(!t) throw new Error("sendAdminReply: empty");
-  await update(ref(db, `requests/${reqId}`), {
-    adminReplyText: t.slice(0, 800),
-    adminReplyAt: Date.now(),
-    adminReplyBy: adminUid
+
+  // 1) Store as an offline message so the client/guest can see it in the same thread.
+  const mref = push(ref(db, `offlineMessages/${reqId}`));
+  const payload = {
+    fromUid: adminUid,
+    fromName: "الدعم",
+    text: t.slice(0, 1200),
+    createdAt: Date.now()
+  };
+  await set(mref, payload);
+
+  // 2) Also set a small reply snapshot on the request to trigger client-side toasts.
+  await update(ref(db), {
+    [`requests/${reqId}/adminReplyText`]: payload.text.slice(0, 800),
+    [`requests/${reqId}/adminReplyAt`]: payload.createdAt,
+    [`requests/${reqId}/adminReplyBy`]: adminUid,
+
+    // keep lastOffline* updated so it appears in admin inbox too
+    [`requests/${reqId}/lastOfflineAt`]: payload.createdAt,
+    [`requests/${reqId}/lastOfflineFrom`]: payload.fromName,
+    [`requests/${reqId}/lastOfflineText`]: payload.text.slice(0, 120)
   });
 }
 
