@@ -1,3 +1,66 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<title>Essam Support • Guest</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="brand">
+      <div class="logo"></div>
+      <div>
+        <h1 class="h1">الضيف</h1>
+        <div class="small" id="who"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
+      <button class="btn" id="btnSwitch">التبديل لتسجيل الدخول</button>
+      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="title">إرسال طلب دعم كضيف</div>
+      <div class="small">املأ رقم الهاتف والملاحظة (اختياري الهاتف).</div>
+      <hr/>
+    <div class="label">الاسم (مطلوب)</div>
+    <input class="input" id="guestName" placeholder="اكتب اسمك" />
+      <div class="label">رقم الهاتف (اختياري)</div>
+      <input class="input" id="phone" placeholder="05xxxxxxxx" />
+      <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
+      <textarea class="input" id="note" rows="4" placeholder="اكتب وصف مختصر للمشكلة..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="btnSend">إرسال الطلب</button>
+        <span class="badge" id="statusBadge">جاهز</span>
+      </div>
+      <div class="small" id="reqInfo" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="title">رسالة أوفلاين</div>
+      <div class="small">إذا لم تكن الجلسة متاحة، اترك رسالة للمدير.</div>
+      <hr/>
+      <textarea class="input" id="offlineText" rows="6" placeholder="اكتب رسالتك..."></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">لأفضل تجربة: ثبّت التطبيق (Install) ثم فعّل الإشعارات.</div>
+</div>
+
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
   // ✅ تم التصحيح هنا أيضاً
@@ -36,3 +99,5 @@
     finally { btnSend.disabled = false; }
   });
 </script>
+</body>
+</html>
