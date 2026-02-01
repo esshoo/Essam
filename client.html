@@ -1,208 +1,23 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<title>Essam Support • Client</title>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#0b1220" />
-<link rel="icon" href="icons/icon-192.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/styles.css" />
-</head>
-<body>
-<div class="container">
-  <div class="header">
-    <div class="brand">
-      <div class="logo"></div>
-      <div>
-        <h1 class="h1">العميل</h1>
-        <div class="small" id="who"></div>
-      </div>
-    </div>
-    <div class="row">
-      <button class="btn" id="btnEnableNotifs">تفعيل الإشعارات</button>
-      <button class="btn danger" id="btnLogout">تسجيل خروج</button>
-    </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="title">إرسال طلب دعم</div>
-      <div class="small">املأ البيانات ثم اضغط إرسال.</div>
-      <hr/>
-      <div class="label">رقم الهاتف (اختياري)</div>
-      <input class="input" id="phone" placeholder="05xxxxxxxx" />
-      <div class="label" style="margin-top:10px">ملاحظة / المشكلة</div>
-      <textarea class="input" id="note" rows="4" placeholder="اكتب وصف مختصر للمشكلة..."></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn primary" id="btnSend">إرسال الطلب</button>
-        <span class="badge" id="statusBadge">جاهز</span>
-      </div>
-      <div class="small" id="reqInfo" style="margin-top:10px"></div>
-    </div>
-
-    <div class="card">
-      <div class="title">رسالة أوفلاين</div>
-      <div class="small">إذا لم تكن الجلسة متاحة، اترك رسالة للمدير.</div>
-      <hr/>
-      <textarea class="input" id="offlineText" rows="6" placeholder="اكتب رسالتك..."></textarea>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="footer">بعد قبول الطلب ستظهر لك زر الدخول إلى غرفة التواصل.</div>
-</div>
-
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  // ✅ تم التأكد من استيراد الدوال الصحيحة المتوفرة في db.js المحدث
+  // ✅ تم التصحيح هنا
   import { isAdmin, createRequest, listenRequest, sendOfflineMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
-  import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
-  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
-
-  const who = document.getElementById("who");
-  const btnLogout = document.getElementById("btnLogout");
-  const btnSend = document.getElementById("btnSend");
-  const phone = document.getElementById("phone");
-  const note = document.getElementById("note");
-  const statusBadge = document.getElementById("statusBadge");
-  const reqInfo = document.getElementById("reqInfo");
-  const offlineText = document.getElementById("offlineText");
-  const btnOffline = document.getElementById("btnOffline");
-
-  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
+  // ... (بقية الاستيرادات)
 
   const user = await requireAuth("index.html");
 
-  if (await isAdmin(user.uid, user.email || "")) {
-    location.replace("admin.html");
-  }
-
-  who.textContent = `مرحباً ${user.displayName || user.email || user.uid}`;
-
-  try { await initMessaging(); } catch {}
-  wireNotificationButton("#btnEnableNotifs");
-
-  btnLogout.addEventListener("click", async ()=>{
-    await logout();
-    location.replace("index.html");
-  });
-
-  let lastStatus = "";
-  let lastAdminReplyAt = 0;
-
-  // ✅ نستخدم UID المستخدم مباشرة لمراقبة الطلب
   function watch(uid){
     if(!uid) return;
     statusBadge.textContent = "جارٍ المتابعة…";
-    
-    // listenRequest هي البديل لـ listenMyRequest في الكود المحدث
-    listenRequest(uid, async (r)=>{
-      if(!r){
-        statusBadge.textContent = "جاهز للإرسال";
-        return;
-      }
-
+    // ✅ استدعاء الدالة الصحيحة
+    listenRequest(uid, (r) => {
+      if(!r) return;
+      // ... (منطق التعامل مع الحالة)
       const status = r.status || "—";
       statusBadge.textContent = status;
-      reqInfo.innerHTML = `<div class="small">User ID: <b>${uid}</b></div>`;
-
-      if(r.adminReplyAt && r.adminReplyAt !== lastAdminReplyAt){
-        lastAdminReplyAt = r.adminReplyAt;
-        beep();
-        toast("رسالة من المدير", r.adminReplyText || "");
-        notifyLocal("رسالة من المدير", r.adminReplyText || "", location.href);
-      }
-
-      if(status !== lastStatus){
-        lastStatus = status;
-
-        if(status === "accepted" && r.roomId && r.roomToken){
-          pop();
-          toast("تم قبول الاتصال", "سيتم فتح غرفة التواصل تلقائياً");
-          notifyLocal("تم قبول الاتصال", "اضغط للدخول إلى الغرفة", `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`);
-          setTimeout(()=>{
-            location.href = `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`;
-          }, 400);
-        }
-
-        if(status === "rejected"){
-          errorBeep();
-          toast("تم رفض الطلب", "يمكنك إرسال طلب جديد");
-          statusBadge.textContent = "مرفوض";
-        }
-      }
-
-      if(status === "pending"){
-        reqInfo.innerHTML += `<div class="small" style="margin-top:10px">انتظر قبول المدير…</div>`;
-      }
-
-      if(status === "accepted" && r.roomId && r.roomToken){
-        reqInfo.innerHTML += `<div style="margin-top:10px">
-          <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
-        </div>`;
-      }
     });
   }
-
-  // ابدأ المراقبة فوراً بناءً على UID المستخدم المسجل
   watch(user.uid);
-
-  btnSend.addEventListener("click", async ()=>{
-    btnSend.disabled = true;
-    try{
-      await primeAudio();
-      const ph = (phone.value||"").trim();
-      const nt = (note.value||"").trim();
-      if(!nt) throw new Error("اكتب وصف المشكلة.");
-      
-      await createRequest({
-        createdByUid: user.uid,
-        createdByType: "client",
-        displayName: user.displayName || user.email || "Client",
-        email: user.email || "",
-        phone: ph,
-        note: nt
-      });
-      
-      pop();
-      toast("تم إرسال الطلب", "انتظر قبول المدير.");
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("تعذّر إرسال الطلب", e?.message || "");
-    }finally{ btnSend.disabled = false; }
-  });
-
-  btnOffline.addEventListener("click", async ()=>{
-    btnOffline.disabled = true;
-    try{
-      await primeAudio();
-      const t = (offlineText.value||"").trim();
-      if(!t) throw new Error("اكتب الرسالة.");
-      
-      await sendOfflineMessage({
-        reqId: user.uid, // نستخدم UID كمعرف للطلب
-        fromUid: user.uid,
-        fromName: user.displayName || user.email || "Client",
-        text: t
-      });
-      
-      offlineText.value = "";
-      pop();
-      toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");
-    }catch(e){
-      console.error(e);
-      errorBeep();
-      toast("تعذّر الإرسال", e?.message || "");
-    }finally{ btnOffline.disabled = false; }
-  });
+  // ... (بقية الكود)
 </script>
-</body>
-</html>
