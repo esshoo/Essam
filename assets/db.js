@@ -1,10 +1,15 @@
-export function listenAllRequests(cb){
-  return onValue(ref(db, "requests"), (snap)=>{
-    const out = [];
-    snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
-    cb(out);
-  });
+export function listenAllRequests(cb, onErr){
+  // Read all requests (admin). We avoid server-side queries to reduce rules/index friction.
+  return onValue(
+    ref(db, "requests"),
+    (snap)=>{
+      const out = [];
+      snap.forEach((ch)=> out.push({ id: ch.key, ...ch.val() }));
+      out.sort((a,b)=> (b.createdAt||0) - (a.createdAt||0));
+      cb(out);
+    },
+    (err)=>{ if(onErr) onErr(err); }
+  );
 }
 
 export function listenOfflineThreadsAdmin(cb){
@@ -64,6 +69,51 @@ export async function isAdmin(uid, email = "") {
   }
 }
 
+
+export async function banUser({ uid, adminUid, reason = "" }){
+  if(!uid) throw new Error("banUser: uid is required");
+  const payload = {
+    by: adminUid || "",
+    reason: String(reason || "").slice(0, 200),
+    at: Date.now()
+  };
+  await set(ref(db, `bans/${uid}`), payload);
+}
+
+export async function unbanUser(uid){
+  if(!uid) throw new Error("unbanUser: uid is required");
+  await remove(ref(db, `bans/${uid}`));
+}
+
+export async function isBanned(uid){
+  if(!uid) return false;
+  const s = await get(ref(db, `bans/${uid}`));
+  return s.exists();
+}
+
+
+export async function getActiveRequestId(uid){
+  if(!uid) return "";
+  try{
+    const s = await get(ref(db, `userState/${uid}/activeRequestId`));
+    return s.exists() ? (s.val() || "") : "";
+  }catch(err){
+    // لو الـ Rules لم تسمح (أو لم تضف userState بعد)، لا نكسر إنشاء الطلب.
+    if(isPermissionDenied(err)) return "";
+    throw err;
+  }
+}
+
+export async function setActiveRequestId(uid, reqId){
+  if(!uid) return;
+  await set(ref(db, `userState/${uid}/activeRequestId`), reqId || "");
+}
+
+
+export async function clearActiveRequestId(uid){
+  return setActiveRequestId(uid, "");
+}
+
 export async function createRequest({
   createdByUid,
   createdByType,
@@ -75,11 +125,70 @@ export async function createRequest({
   if (!createdByUid) throw new Error("createRequest: createdByUid is required");
   if (!createdByType) throw new Error("createRequest: createdByType is required");
 
-  const reqRef = push(ref(db, "requests"));
+  // Block banned users (admin controls /bans)
+  if(await isBanned(createdByUid)){
+    throw new Error("تم حظرك من إرسال طلبات.");
+  }
+
+  // Prevent multiple pending/active requests for same user
+let activeId = await getActiveRequestId(createdByUid);
+if(activeId){
+  try{
+    const s = await get(ref(db, `requests/${activeId}`));
+    if(s.exists()){
+      const r = s.val();
+      const st = String(r.status || "").trim().toLowerCase();
+	      if(st === "pending"){
+	        // "Bump" the existing pending request so it re-appears at the top for admin.
+	        try{
+	          await update(ref(db), {
+	            [`requests/${activeId}/pingAt`]: Date.now(),
+	            [`requests/${activeId}/pingFrom`]: (displayName || email || phone || createdByUid || "").slice(0, 120)
+	          });
+	        }catch(_e){ /* ignore */ }
+	        return { reqId: activeId, reused: true, status: "pending" };
+	      }
+
+	      if(st === "accepted"){
+	        // If an old accepted room is still active, reuse.
+	        // Otherwise (room missing/inactive/expired), clear pointer and allow a new request.
+	        const roomId = r.roomId || activeId;
+	        const token = r.roomToken || "";
+	        const acceptedAt = Number(r.acceptedAt || 0);
+	        const base = acceptedAt || Number(r.createdAt || 0) || 0;
+	        const ageMs = base ? (Date.now() - base) : 0;
+	        const EXPIRE_MS = 2 * 60 * 60 * 1000; // 2 hours
+	
+	        let roomActive = false;
+	        try{
+	          const rs = await get(ref(db, `rooms/${roomId}/active`));
+	          roomActive = rs.exists() ? (rs.val() === true) : false;
+	        }catch(_e){ /* ignore */ }
+
+	        if(token && roomActive && (!base || ageMs < EXPIRE_MS)){
+	          return { reqId: activeId, reused: true, status: "accepted" };
+	        }
+	        // fallthrough: not active -> clear and create new
+	      }
+    }
+  }catch(err){
+    // If we cannot read the referenced request (old/foreign id), clear and continue.
+    if(isPermissionDenied(err)){
+      try{ await clearActiveRequestId(createdByUid); }catch{}
+      activeId = "";
+    }else{
+      throw err;
+    }
+  }
+  // Old request is not active anymore => clear active pointer
+  try{ await clearActiveRequestId(createdByUid); }catch{}
+}
+
+const reqRef = push(ref(db, "requests"));
   const payload = {
     createdByUid,
     createdByType,
-    displayName: displayName || (email || "") || "",   // ✅ أفضل من فاضي
+    displayName: displayName || (email || "") || "",
     email: email || "",
     phone: phone || "",
     note: note || "",
@@ -88,16 +197,22 @@ export async function createRequest({
     roomId: "",
     roomToken: "",
     createdAt: Date.now(),
-
-    // ✅ مؤشرات للأوفلاين (عشان الأدمن يشوفها بسهولة)
+    pingAt: 0,
+    pingFrom: "",
     lastOfflineAt: 0,
     lastOfflineFrom: "",
     lastOfflineText: ""
   };
 
   await set(reqRef, payload);
-  return { reqId: reqRef.key };
+  try{
+    await setActiveRequestId(createdByUid, reqRef.key);
+  }catch(_e){
+    // لو userState غير متوفر في قواعدك بعد، تجاهل.
+  }
+  return { reqId: reqRef.key, reused: false };
 }
+
 
 export function listenMyRequest(reqId, cb) {
   if (!reqId) throw new Error("listenMyRequest: reqId is required");
@@ -142,17 +257,36 @@ export async function acceptRequest({ reqId, adminUid }) {
   }
 
   await update(ref(db), updates);
+
+  // ✅ رسالة نظام ثابتة (عشان ما تضيعش لو الاشعار اختفى)
+  try{
+    const sys = push(ref(db, `offlineMessages/${reqId}`));
+    await set(sys, {
+      fromUid: "system",
+      fromName: "النظام",
+      text: "✅ تم قبول طلبك. يمكنك دخول غرفة التواصل الآن.",
+      createdAt: Date.now(),
+      kind: "system"
+    });
+  }catch(_e){}
+
   return { roomId, token };
 }
 
 export async function rejectRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("rejectRequest: reqId is required");
-  await update(ref(db, `requests/${reqId}`), {
-    status: "rejected",
-    rejectedAt: Date.now(),
-    assignedAdminUid: adminUid || ""
+
+  const s = await get(ref(db, `requests/${reqId}`));
+  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
+
+  await update(ref(db), {
+    [`requests/${reqId}/status`]: "rejected",
+    [`requests/${reqId}/rejectedAt`]: Date.now(),
+    [`requests/${reqId}/assignedAdminUid`]: adminUid || "",
+    ...(createdByUid ? { [`userState/${createdByUid}/activeRequestId`]: "" } : {})
   });
 }
+
 
 /**
  * Close a request/session (admin only).
@@ -161,6 +295,9 @@ export async function rejectRequest({ reqId, adminUid }) {
 export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" }) {
   if (!reqId) throw new Error("closeRequestAsAdmin: reqId is required");
   if (!adminUid) throw new Error("closeRequestAsAdmin: adminUid is required");
+
+  const s = await get(ref(db, `requests/${reqId}`));
+  const createdByUid = s.exists() ? (s.val().createdByUid || "") : "";
 
   const endedAt = Date.now();
   const updates = {};
@@ -176,8 +313,13 @@ export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" })
   updates[`rooms/${reqId}/endedBy`] = adminUid;
   updates[`rooms/${reqId}/endReason`] = reason;
 
+  if(createdByUid){
+    updates[`userState/${createdByUid}/activeRequestId`] = "";
+  }
+
   await update(ref(db), updates);
 }
+
 
 export function listenRequest(reqId, cb) {
   if (!reqId) throw new Error("listenRequest: reqId is required");

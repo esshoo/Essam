@@ -53,6 +53,9 @@
         <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
       </div>
       <div class="small">ستظهر هذه الرسالة للمدير في لوحة التحكم.</div>
+      <hr/>
+      <div class="small">سجل الرسائل (يرد المدير هنا)</div>
+      <div class="chatlog" id="threadBox" style="height:220px; margin-top:8px"></div>
     </div>
   </div>
 
@@ -61,7 +64,7 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, listenOfflineMessagesForRequest, clearActiveRequestId } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
   import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
@@ -75,6 +78,7 @@
   const reqInfo = document.getElementById("reqInfo");
   const offlineText = document.getElementById("offlineText");
   const btnOffline = document.getElementById("btnOffline");
+  const threadBox = document.getElementById("threadBox");
 
   // enable audio tones after first gesture
   window.addEventListener("pointerdown", () => primeAudio(), { once:true });
@@ -99,6 +103,41 @@
   let currentReqId = localStorage.getItem("clientReqId") || "";
   let lastStatus = "";
   let lastAdminReplyAt = 0;
+  let unsubThread = null;
+
+
+  function renderThread(msgs){
+    if(!threadBox) return; threadBox.innerHTML = "";
+    if(!msgs || !msgs.length){
+      threadBox.innerHTML = `<div class="small">لا توجد رسائل بعد.</div>`;
+      return;
+    }
+    for(const m of msgs){
+      const who = m.fromName || m.fromUid || "—";
+      const el = document.createElement("div");
+      el.className = "msg";
+      el.innerHTML = `<div class="who"><b>${who}</b> • ${new Date(m.createdAt||0).toLocaleString("ar-EG")}</div><div>${(m.text||"")}</div>`;
+      threadBox.appendChild(el);
+    }
+    threadBox.scrollTop = threadBox.scrollHeight;
+  }
+
+  function attachThread(reqId){
+    try{ unsubThread?.(); }catch{}
+    unsubThread = null;
+    if(!reqId) { renderThread([]); return; }
+    unsubThread = listenOfflineMessagesForRequest(reqId, (msgs)=>{
+      renderThread(msgs);
+      // تنبيه لو في رد جديد من المدير/النظام
+      const latest = msgs.reduce((acc,x)=> Math.max(acc, x.createdAt||0), 0);
+      if(latest && latest > lastAdminReplyAt){
+        lastAdminReplyAt = latest;
+        beep();
+        notifyLocal("رسالة جديدة", "تم تحديث سجل الرسائل", location.href);
+      }
+    });
+  }
+
 
   function clearReq(){
     currentReqId = "";
@@ -107,11 +146,14 @@
     lastAdminReplyAt = 0;
     statusBadge.textContent = "—";
     reqInfo.innerHTML = "";
+    attachThread("");
+    try{ clearActiveRequestId(user.uid); }catch{}
   }
 
   function watch(id){
     if(!id) return;
     statusBadge.textContent = "جارٍ المتابعة…";
+    attachThread(id);
     listenMyRequest(id, async (r)=>{
       if(!r){
         statusBadge.textContent = "غير موجود";

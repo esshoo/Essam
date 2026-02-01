@@ -33,8 +33,12 @@
     <div class="card">
       <div class="title">الطلبات الجديدة (Pending)</div>
       <div class="small">تظهر تلقائيًا. اضغط قبول لإنشاء غرفة.</div>
+      <div class="row" style="margin-top:10px; justify-content:space-between">
+        <div class="badge" id="pendingCountBadge">—</div>
+        <input class="input" id="pendingSearch" placeholder="بحث بالاسم/الإيميل/UID..." style="max-width:320px" />
+      </div>
       <hr/>
-      <div class="list" id="reqList"></div>
+      <div class="list" id="reqList" style="max-height:380px; overflow:auto"></div>
     </div>
 
     <div class="card">
@@ -75,7 +79,8 @@
     listenOfflineThreadsAdmin,
     clearOfflineMessagesAsAdmin,
     deleteOfflineMessageAsAdmin,
-    sendAdminReply
+    sendAdminReply,
+    banUser
   } from "./assets/db.js";
   import { toast, fmtTime, escapeHtml } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
@@ -83,6 +88,8 @@
 
   const who = document.getElementById("who");
   const reqList = document.getElementById("reqList");
+  const pendingCountBadge = document.getElementById("pendingCountBadge");
+  const pendingSearch = document.getElementById("pendingSearch");
   const btnLogout = document.getElementById("btnLogout");
 
   const offlineThreads = document.getElementById("offlineThreads");
@@ -146,6 +153,7 @@
         <div class="row">
           <button class="btn" data-act="accept" data-id="${r.id}">قبول</button>
           <button class="btn danger" data-act="reject" data-id="${r.id}">رفض</button>
+          <button class="btn danger" data-act="ban" data-uid="${r.createdByUid||""}">حظر</button>
         </div>
       `;
       reqList.appendChild(el);
@@ -158,6 +166,15 @@
         b.disabled = true;
         try{
           await primeAudio();
+          if(act === "ban"){
+            const uid = b.dataset.uid;
+            if(!uid) throw new Error("لا يوجد UID لهذا المستخدم");
+            await banUser({ uid, adminUid: user.uid, reason: "manual" });
+            toast("تم الحظر", "تم حظر هذا المستخدم. لن يستطيع إرسال طلبات/رسائل جديدة.");
+            errorBeep();
+            return;
+          }
+
           if(act === "accept"){
             pop();
             const { token } = await acceptRequest({ reqId: id, adminUid: user.uid });
@@ -179,10 +196,34 @@
   }
 
   let requestMap = new Map();
+  let lastPending = [];
+
+  function applySearch(list){
+    const q = (pendingSearch?.value || "").trim().toLowerCase();
+    if(!q) return list;
+    return list.filter(r=>{
+      const hay = [r.displayName, r.email, r.phone, r.createdByUid, r.id]
+        .filter(Boolean).join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  pendingSearch?.addEventListener("input", ()=>{
+    try{ renderPending(applySearch(lastPending)); }catch{}
+  });
 
   listenAllRequests((all)=>{
     requestMap = new Map(all.map(r=>[r.id, r]));
-    const items = all.filter(r=> (r.status||"") === "pending");
+
+    // ✅ عرض *كل* الطلبات المعلّقة (بدون دمج حسب المستخدم)
+    const items = all
+      .filter(r => String(r.status||"").trim().toLowerCase() === "pending")
+      // sort by latest activity: pingAt beats createdAt (so "إعادة الطلب" يطلع فوق)
+      .sort((a,b)=> (Math.max(b.pingAt||0, b.createdAt||0)) - (Math.max(a.pingAt||0, a.createdAt||0)) );
+
+    lastPending = items;
+    try{ pendingCountBadge.textContent = `عدد الطلبات المعلّقة: ${items.length}`; }catch{}
 
     // detect new pending
     const ids = new Set(items.map(x=>x.id));
@@ -195,7 +236,15 @@
       notifyLocal("طلب اتصال جديد", `${newOnes.length} طلب/طلبات جديدة`, location.href);
     }
     seenPending = ids;
-    renderPending(items);
+    try{
+      renderPending(applySearch(items));
+    }catch(e){
+      console.error(e);
+      reqList.innerHTML = `<div class="small" style="color:#ffb4be">حدث خطأ أثناء عرض الطلبات. افتح Console للاطلاع على التفاصيل.</div>`;
+    }
+  }, (err)=>{
+    console.error(err);
+    toast("خطأ صلاحيات", "لوحة الأدمن لا تستطيع قراءة requests. تأكد أن Rules فيها requests/.read للأدمن ثم اعمل Hard Reload.");
   });
 
 
