@@ -11,148 +11,107 @@
         .user-img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; border: 3px solid #0088cc; }
         button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
         .hidden { display: none; }
-        .pulse { animation: pulse 1.5s infinite; font-size: 40px; margin: 10px 0; }
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
 </head>
 <body>
 
     <div class="card" id="form-card">
-        <img id="u-img" src="" class="user-img">
-        <h3 id="u-name">أهلاً بك</h3>
-        <p style="color: #666;">اضغط الزر لطلب محادثة فيديو فورية مع المهندس عصام</p>
-        
-        <input type="tel" id="phone" placeholder="رقم جوالك (للتواصل)" style="width:90%; padding:10px; margin-top:10px; border:1px solid #ddd; border-radius:5px;">
-        
-        <button onclick="submitRequest()">📞 طلب محادثة الآن</button>
-        <button onclick="logout()" style="background:#555; margin-top:10px;">خروج</button>
+        <img id="user-photo" class="user-img" src="" alt="user">
+        <h2 id="welcome-msg">مرحباً</h2>
+        <p>أدخل رقم هاتفك لإرسال طلب محادثة للمهندس</p>
+        <input type="tel" id="phone" placeholder="رقم الهاتف (مثال: 050xxxxxxx)">
+        <button onclick="submitRequest()">إرسال طلب اتصال 📞</button>
+        <button style="background:#666; margin-top:10px;" onclick="logout()">تسجيل الخروج</button>
     </div>
 
-<div class="card hidden" id="waiting-card">
-    <div class="pulse">⏳</div>
-    <h3 id="wait-title">جاري الاتصال...</h3>
-    <p id="wait-msg">برجاء البقاء في هذه الصفحة.</p>
-
-    <div id="client-actions">
-        <button onclick="showClientMsg()" style="background: #f39c12; margin-top: 15px;">📩 ترك رسالة (سيتم الرد بالإيميل)</button>
+    <div class="card hidden" id="waiting-card">
+        <h2 id="wait-title">تم إرسال طلبك ✅</h2>
+        <p id="wait-msg">يرجى الانتظار، سيقوم المهندس بقبول طلبك قريباً.</p>
+        <div id="client-actions">
+            <button style="background:#0088cc;" onclick="showClientMsg()">ترك رسالة للمهندس</button>
+        </div>
+        <div id="client-msg-form" class="hidden">
+            <textarea id="c-msg-content" style="width:100%; height:100px; margin-top:10px; border-radius:8px; padding:10px;" placeholder="اكتب رسالتك هنا..."></textarea>
+            <button onclick="sendClientMessage()">إرسال الرسالة</button>
+        </div>
     </div>
-
-    <div id="client-msg-form" class="hidden" style="margin-top: 15px;">
-        <textarea id="c-msg-content" placeholder="بماذا يمكننا مساعدتك؟" style="width: 90%; padding: 10px; border-radius: 8px; border: 1px solid #ddd;" rows="3"></textarea>
-        <button onclick="sendClientMessage()" style="background: #27ae60;">إرسال</button>
-    </div>
-</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs", // تأكد من مفاتيحك
-            authDomain: "essam-support.firebaseapp.com",
-            projectId: "essam-support",
-            storageBucket: "essam-support.firebasestorage.app",
-            messagingSenderId: "1062222968750",
-            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
-        };
-
+        const firebaseConfig = { /* بياناتك هنا */ };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
-        
-        let userUid = null;
-        let userName = "";
 
-        // التحقق من الدخول
+        let userUid, userName;
+
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 userUid = user.uid;
-                userName = user.displayName || "عميل مميز";
-                
-                document.getElementById('u-name').innerText = "أهلاً، " + userName;
-                document.getElementById('u-img').src = user.photoURL || "https://ui-avatars.com/api/?name=" + userName;
+                userName = user.displayName;
+                document.getElementById('user-photo').src = user.photoURL;
+                document.getElementById('welcome-msg').innerText = "مرحباً " + userName;
             } else {
                 window.location.href = "index.html";
             }
         });
 
-// استبدل دالة submitRequest في ملف client.html بهذا الكود:
-window.submitRequest = function() {
-    const phone = document.getElementById('phone').value;
-    if(!phone) return alert("يرجى كتابة رقم الهاتف");
+        window.submitRequest = function() {
+            const phone = document.getElementById('phone').value;
+            if(!phone) return alert("يرجى كتابة رقم الهاتف");
 
-    // التحقق من وجود UID قبل الإرسال
-    if(!userUid) return alert("جاري تحميل بيانات المستخدم، حاول ثانية");
+            document.getElementById('form-card').classList.add('hidden');
+            document.getElementById('waiting-card').classList.remove('hidden');
 
-    document.getElementById('form-card').classList.add('hidden');
-    document.getElementById('waiting-card').classList.remove('hidden');
+            const newRequestRef = push(ref(db, 'requests'));
+            const reqId = newRequestRef.key;
 
-    const newRequestRef = push(ref(db, 'requests'));
-    const reqId = newRequestRef.key;
-    
-    // التعديل هنا: استخدام createdByUid بدلاً من uid
-    set(newRequestRef, {
-        name: userName + " (Google)",
-        phone: phone,
-        status: 'pending',
-        timestamp: Date.now(),
-        createdByUid: userUid // تم الإصلاح هنا
-    }).catch(error => {
-        console.error("خطأ في الإرسال:", error);
-        alert("فشل الإرسال: " + error.message);
-    });
+            set(newRequestRef, {
+                name: userName,
+                phone: phone,
+                status: 'pending',
+                timestamp: Date.now(),
+                createdByUid: userUid // تم الإصلاح هنا ليتوافق مع Rules
+            });
 
-    // مراقبة الرد
-    onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
-        const status = snapshot.val();
-        if (status === 'accepted') {
-            window.location.href = `video.html?room=${reqId}&role=client`;
-        } else if (status === 'rejected') {
-            document.getElementById('wait-title').innerText = "المهندس غير متاح حالياً";
-            document.getElementById('wait-msg').innerText = "يمكنك ترك رسالة وسنرد عليك عبر البريد الإلكتروني.";
-            showClientMsg(); 
+            // مراقبة الحالة للانتقال لصفحة الفيديو
+            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+                const status = snapshot.val();
+                if (status === 'accepted') {
+                    window.location.href = `video.html?room=${reqId}&role=client&name=${encodeURIComponent(userName)}`;
+                } else if (status === 'rejected') {
+                    alert("نعتذر، المهندس غير متاح حالياً.");
+                    location.reload();
+                }
+            });
         }
-    });
-}
 
         window.logout = function() {
             signOut(auth).then(() => window.location.href = "index.html");
         }
-		window.showClientMsg = function() {
-    document.getElementById('client-actions').classList.add('hidden');
-    document.getElementById('client-msg-form').classList.remove('hidden');
-}
 
-window.sendClientMessage = function() {
-    const content = document.getElementById('c-msg-content').value;
-    if(!content) return alert("اكتب رسالتك");
+        window.showClientMsg = function() {
+            document.getElementById('client-actions').classList.add('hidden');
+            document.getElementById('client-msg-form').classList.remove('hidden');
+        }
 
-    // نستخدم بيانات جوجل مباشرة
-    push(ref(db, 'messages'), {
-        name: auth.currentUser.displayName,
-        contact: auth.currentUser.email, // الإيميل تلقائي
-        content: content,
-        type: 'Google User',
-        timestamp: Date.now()
-    }).then(() => {
-        alert("تم الإرسال! سيصلك الرد على إيميلك: " + auth.currentUser.email);
-        location.reload();
-    });
-}
-
-// تعديل جزء الرفض (داخل onValue):
-/*
-else if (status === 'rejected') {
-    document.getElementById('wait-title').innerText = "المهندس غير متاح حالياً";
-    document.getElementById('wait-msg').innerText = "يمكنك ترك رسالة وسنرد عليك عبر البريد الإلكتروني.";
-    document.getElementById('wait-msg').style.color = "#e74c3c";
-    
-    // إظهار النموذج فوراً
-    showClientMsg();
-}
-*/
+        window.sendClientMessage = function() {
+            const content = document.getElementById('c-msg-content').value;
+            if(!content) return alert("اكتب رسالتك");
+            push(ref(db, 'messages'), {
+                name: userName,
+                contact: auth.currentUser.email,
+                content: content,
+                type: 'Google User',
+                timestamp: Date.now()
+            }).then(() => {
+                alert("تم الإرسال بنجاح");
+                location.reload();
+            });
+        }
     </script>
 </body>
 </html>
-
