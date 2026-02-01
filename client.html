@@ -64,7 +64,7 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, listenOfflineMessagesForRequest } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, listenOfflineMessagesForRequest, clearActiveRequestId } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
   import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
@@ -107,7 +107,7 @@
 
 
   function renderThread(msgs){
-    threadBox.innerHTML = "";
+    if(!threadBox) return; threadBox.innerHTML = "";
     if(!msgs || !msgs.length){
       threadBox.innerHTML = `<div class="small">لا توجد رسائل بعد.</div>`;
       return;
@@ -147,6 +147,7 @@
     statusBadge.textContent = "—";
     reqInfo.innerHTML = "";
     attachThread("");
+    try{ clearActiveRequestId(user.uid); }catch{}
   }
 
   function watch(id){

@@ -196,8 +196,10 @@
 
     // ✅ عرض *كل* الطلبات المعلّقة (بدون دمج حسب المستخدم)
     const items = all
-      .filter(r => String(r.status||"").toLowerCase() === "pending")
+      .filter(r => String(r.status||"").trim().toLowerCase() === "pending")
       .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+    try{ pendingCountBadge.textContent = `عدد الطلبات المعلّقة: ${items.length}`; }catch{}
 
     // detect new pending
     const ids = new Set(items.map(x=>x.id));

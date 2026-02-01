@@ -56,6 +56,14 @@
         <button class="btn" id="btnOffline">إرسال رسالة أوفلاين</button>
       </div>
     </div>
+
+      <div class="card">
+        <div class="row" style="justify-content: space-between; align-items: center;">
+          <div><b>سجل الرسائل</b></div>
+          <div class="small">سيبقى الرد هنا حتى لو فاتك الإشعار</div>
+        </div>
+        <div id="threadBox" class="thread"></div>
+      </div>
   </div>
 
   <div class="footer">لأفضل تجربة: ثبّت التطبيق (Install) ثم فعّل الإشعارات.</div>
@@ -63,7 +71,7 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, listenOfflineMessagesForRequest } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage, listenOfflineMessagesForRequest, clearActiveRequestId } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
   import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
   import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
@@ -121,7 +129,7 @@
 
 
   function renderThread(msgs){
-    threadBox.innerHTML = "";
+    if(!threadBox) return; threadBox.innerHTML = "";
     if(!msgs || !msgs.length){
       threadBox.innerHTML = `<div class="small">لا توجد رسائل بعد.</div>`;
       return;
@@ -161,6 +169,7 @@
     statusBadge.textContent = "—";
     reqInfo.innerHTML = "";
     attachThread("");
+    try{ clearActiveRequestId(user.uid); }catch{}
   }
 
   function watch(id){

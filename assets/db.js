@@ -109,6 +109,11 @@ export async function setActiveRequestId(uid, reqId){
   await set(ref(db, `userState/${uid}/activeRequestId`), reqId || "");
 }
 
+
+export async function clearActiveRequestId(uid){
+  return setActiveRequestId(uid, "");
+}
+
 export async function createRequest({
   createdByUid,
   createdByType,
@@ -126,19 +131,31 @@ export async function createRequest({
   }
 
   // Prevent multiple pending/active requests for same user
-  const activeId = await getActiveRequestId(createdByUid);
-  if(activeId){
+let activeId = await getActiveRequestId(createdByUid);
+if(activeId){
+  try{
     const s = await get(ref(db, `requests/${activeId}`));
     if(s.exists()){
       const r = s.val();
-      const st = (r.status || "").toLowerCase();
+      const st = String(r.status || "").trim().toLowerCase();
       if(st === "pending" || st === "accepted"){
         return { reqId: activeId, reused: true };
       }
     }
+  }catch(err){
+    // If we cannot read the referenced request (old/foreign id), clear and continue.
+    if(isPermissionDenied(err)){
+      try{ await clearActiveRequestId(createdByUid); }catch{}
+      activeId = "";
+    }else{
+      throw err;
+    }
   }
+  // Old request is not active anymore => clear active pointer
+  try{ await clearActiveRequestId(createdByUid); }catch{}
+}
 
-  const reqRef = push(ref(db, "requests"));
+const reqRef = push(ref(db, "requests"));
   const payload = {
     createdByUid,
     createdByType,
