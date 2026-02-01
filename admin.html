@@ -2,74 +2,77 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لوحة تحكم المهندس</title>
+    <title>لوحة تحكم الإدارة</title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Tajawal', sans-serif; background: #1a1a1a; color: white; padding: 20px; }
-        .request-card { background: #333; padding: 20px; border-radius: 12px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border-right: 5px solid #0088cc; }
-        button { padding: 10px 15px; border-radius: 5px; cursor: pointer; border: none; font-weight: bold; }
-        .btn-accept { background: #28a745; color: white; }
-        .btn-reject { background: #dc3545; color: white; margin-right: 5px; }
+        #admin-content { display: none; } /* مخفي حتى نتأكد من الهوية */
+        .request-card { background: #333; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+        .btn-accept { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>الطلبات الواردة 📥</h1>
-    <div id="requests-list">جاري التحميل...</div>
+
+    <div id="loading-msg">جاري التحقق من صلاحيات المسؤول...</div>
+
+    <div id="admin-content">
+        <h1>الطلبات الواردة 📥</h1>
+        <div id="requests-list">لا توجد طلبات حالياً</div>
+        <button onclick="logout()" style="margin-top:20px; background:#555; color:white; border:none; padding:10px; cursor:pointer;">تسجيل الخروج</button>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // ⚠️ ضع بياناتك هنا أيضاً
-        const firebaseConfig = {
-            apiKey: "AIzaSy...",
-            authDomain: "your-app.firebaseapp.com",
-            databaseURL: "https://your-app-default-rtdb.firebaseio.com",
-            projectId: "your-app-id"
-        };
+        const firebaseConfig = { /* ضع نفس بياناتك هنا */ };
 
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
         const auth = getAuth(app);
+        const db = getDatabase(app);
+        const ADMIN_EMAIL = "esshoo@gmail.com";
 
         onAuthStateChanged(auth, (user) => {
-            if (!user || user.email !== 'esshoo@gmail.com') {
-                window.location.href = "index.html";
+            if (user && user.email === ADMIN_EMAIL) {
+                // المستخدم هو الأدمن فعلاً
+                document.getElementById('loading-msg').style.display = 'none';
+                document.getElementById('admin-content').style.display = 'block';
+                loadRequests();
+            } else {
+                // ليس الأدمن أو غير مسجل دخول -> اخرج فوراً لمنع الـ Loop
+                window.location.replace("index.html");
             }
         });
 
-        onValue(ref(db, 'requests'), (snapshot) => {
-            const list = document.getElementById('requests-list');
-            list.innerHTML = '';
-            snapshot.forEach((child) => {
-                const req = child.val();
-                if (req.status === 'pending') {
-                    const div = document.createElement('div');
-                    div.className = 'request-card';
-                    div.innerHTML = `
-                        <div><strong>${req.name}</strong><br><small>${req.phone}</small></div>
-                        <div>
-                            <button class="btn-accept" onclick="acceptUser('${child.key}', '${req.name}')">قبول ✅</button>
-                            <button class="btn-reject" onclick="rejectUser('${child.key}')">رفض ✖</button>
-                        </div>
-                    `;
-                    list.appendChild(div);
-                }
+        function loadRequests() {
+            onValue(ref(db, 'requests'), (snapshot) => {
+                const list = document.getElementById('requests-list');
+                list.innerHTML = '';
+                snapshot.forEach((child) => {
+                    const req = child.val();
+                    if (req.status === 'pending') {
+                        const div = document.createElement('div');
+                        div.className = 'request-card';
+                        div.innerHTML = `
+                            <div><strong>${req.name}</strong> (${req.phone})</div>
+                            <button class="btn-accept" onclick="acceptUser('${child.key}', '${req.name}')">قبول</button>
+                        `;
+                        list.appendChild(div);
+                    }
+                });
             });
-            if (list.innerHTML === '') list.innerText = 'لا توجد طلبات حالياً';
-        });
+        }
 
-        window.acceptUser = function(key, name) {
-            update(ref(db, `requests/${key}`), { status: 'accepted' })
-            .then(() => {
+        window.acceptUser = (key, name) => {
+            update(ref(db, `requests/${key}`), { status: 'accepted' }).then(() => {
                 window.open(`video.html?room=${key}&role=admin&name=${encodeURIComponent(name)}`, '_blank');
             });
-        }
+        };
 
-        window.rejectUser = function(key) {
-            update(ref(db, `requests/${key}`), { status: 'rejected' });
-        }
+        window.logout = () => {
+            signOut(auth).then(() => window.location.replace("index.html"));
+        };
     </script>
 </body>
 </html>
