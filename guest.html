@@ -53,13 +53,12 @@
 
         // إعدادات Firebase (نفسها في كل الملفات)
         const firebaseConfig = {
-  apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
-  authDomain: "essam-support.firebaseapp.com",
-  databaseURL: "https://essam-support-default-rtdb.firebaseio.com",
-  projectId: "essam-support",
-  storageBucket: "essam-support.firebasestorage.app",
-  messagingSenderId: "1062222968750",
-  appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
+            apiKey: "AIzaSyCV6xsRfSlpt5t9YNCVIivxJoRwj1TIexs",
+            authDomain: "essam-support.firebaseapp.com",
+            projectId: "essam-support",
+            storageBucket: "essam-support.firebasestorage.app",
+            messagingSenderId: "1062222968750",
+            appId: "1:1062222968750:web:1c827c20729f76fbe7ba3f"
         };
 
         const app = initializeApp(firebaseConfig);
@@ -93,7 +92,7 @@
                 phone: phone,
                 status: 'pending',
                 timestamp: Date.now(),
-                uid: myUid // ✅✅✅ هذا هو التعديل الأمني المهم
+                createdByUid: myUid // ✅ تم التعديل ليطابق Rules
             });
 
             // إظهار الانتظار
