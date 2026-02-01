@@ -94,8 +94,14 @@ export async function isBanned(uid){
 
 export async function getActiveRequestId(uid){
   if(!uid) return "";
-  const s = await get(ref(db, `userState/${uid}/activeRequestId`));
-  return s.exists() ? (s.val() || "") : "";
+  try{
+    const s = await get(ref(db, `userState/${uid}/activeRequestId`));
+    return s.exists() ? (s.val() || "") : "";
+  }catch(err){
+    // لو الـ Rules لم تسمح (أو لم تضف userState بعد)، لا نكسر إنشاء الطلب.
+    if(isPermissionDenied(err)) return "";
+    throw err;
+  }
 }
 
 export async function setActiveRequestId(uid, reqId){
@@ -151,7 +157,11 @@ export async function createRequest({
   };
 
   await set(reqRef, payload);
-  await setActiveRequestId(createdByUid, reqRef.key);
+  try{
+    await setActiveRequestId(createdByUid, reqRef.key);
+  }catch(_e){
+    // لو userState غير متوفر في قواعدك بعد، تجاهل.
+  }
   return { reqId: reqRef.key, reused: false };
 }
 

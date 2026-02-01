@@ -17,6 +17,11 @@ export async function loginGoogle() {
 
 export async function loginGuest() {
   await authReady;
+  // ✅ Reuse existing anonymous session to keep a stable UID
+  // Calling signInAnonymously repeatedly can create a new UID each time.
+  if (auth.currentUser && auth.currentUser.isAnonymous) {
+    return auth.currentUser;
+  }
   const res = await signInAnonymously(auth);
   return res.user;
 }

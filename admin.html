@@ -193,16 +193,11 @@
 
   listenAllRequests((all)=>{
     requestMap = new Map(all.map(r=>[r.id, r]));
-    // ✅ نجمع الطلبات حسب المستخدم (عشان ما يبانش نفس الشخص كذا مرة)
-    const pending = all.filter(r=> (r.status||"") === "pending");
-    const byUser = new Map();
-    for(const r of pending){
-      const k = r.createdByUid || r.email || r.phone || r.id;
-      if(!byUser.has(k) || (r.createdAt||0) > (byUser.get(k).createdAt||0)){
-        byUser.set(k, r);
-      }
-    }
-    const items = Array.from(byUser.values()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+    // ✅ عرض *كل* الطلبات المعلّقة (بدون دمج حسب المستخدم)
+    const items = all
+      .filter(r => String(r.status||"").toLowerCase() === "pending")
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
     // detect new pending
     const ids = new Set(items.map(x=>x.id));

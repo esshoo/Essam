@@ -79,7 +79,7 @@
     "userState": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
-        ".write": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && (auth.uid === $uid || auth.token.email == 'esshoo@gmail.com')",
         "activeRequestId": {
           ".validate": "newData.isString() || newData.val() === '' || newData.val() === null"
         }
