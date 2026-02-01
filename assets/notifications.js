@@ -113,3 +113,19 @@ export function wireNotificationButton(btnSelector = "#btnEnableNotifs") {
     }
   });
 }
+
+
+// Local notification helper (works without FCM when page is open).
+export async function notifyLocal(title, body = "", url = "") {
+  try{
+    if (!("Notification" in window)) return;
+    const perm = Notification.permission;
+    if (perm !== "granted") return;
+
+    // Only show system notifications when tab is hidden to avoid noise.
+    if (document.visibilityState !== "visible") {
+      const n = new Notification(title, { body });
+      if (url) n.onclick = () => { try{ window.open(url, "_blank"); }catch{} };
+    }
+  }catch{}
+}

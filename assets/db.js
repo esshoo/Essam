@@ -1,6 +1,6 @@
 import {
   db, ref, get, set, push, update,
-  onValue, query, orderByChild, equalTo
+  onValue, query, orderByChild, equalTo, startAt, limitToLast, remove
 } from "./firebase.js";
 import { randomToken } from "./ui.js";
 
@@ -93,6 +93,7 @@ export async function acceptRequest({ reqId, adminUid }) {
 
   const updates = {};
   updates[`requests/${reqId}/status`] = "accepted";
+  updates[`requests/${reqId}/acceptedAt`] = Date.now();
   updates[`requests/${reqId}/assignedAdminUid`] = adminUid;
   updates[`requests/${reqId}/roomId`] = roomId;
   updates[`requests/${reqId}/roomToken`] = token;
@@ -114,6 +115,7 @@ export async function rejectRequest({ reqId, adminUid }) {
   if (!reqId) throw new Error("rejectRequest: reqId is required");
   await update(ref(db, `requests/${reqId}`), {
     status: "rejected",
+    rejectedAt: Date.now(),
     assignedAdminUid: adminUid || ""
   });
 }
@@ -146,33 +148,6 @@ export async function closeRequestAsAdmin({ reqId, adminUid, reason = "ended" })
 export function listenRequest(reqId, cb) {
   if (!reqId) throw new Error("listenRequest: reqId is required");
   return onValue(ref(db, `requests/${reqId}`), (snap) => cb(snap.exists() ? snap.val() : null));
-}
-
-/**
- * Global offline messages feed (similar to the old project).
- * Admin reads this to see messages immediately without typing reqId.
- */
-export async function pushGlobalMessage({ reqId, fromUid, name, contact, type, content }) {
-  const mref = push(ref(db, `messages`));
-  await set(mref, {
-    reqId: reqId || "",
-    fromUid: fromUid || "",
-    name: name || "",
-    contact: contact || "",
-    type: type || "",
-    content: content || "",
-    timestamp: Date.now()
-  });
-}
-
-export function listenGlobalMessages(cb) {
-  // latest first (simple)
-  return onValue(ref(db, `messages`), (snap) => {
-    const out = [];
-    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
-    out.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    cb(out);
-  });
 }
 
 export async function sendOfflineMessage({ reqId, fromUid, fromName, text }) {
@@ -208,6 +183,43 @@ export function listenOfflineMessagesForRequest(reqId, cb) {
     cb(out);
   });
 }
+
+
+
+export function listenRequestsWithOffline(cb){
+  // Requests that have lastOfflineAt > 0 (admin only, enforced by rules)
+  const q = query(ref(db, "requests"), orderByChild("lastOfflineAt"), startAt(1), limitToLast(50));
+  return onValue(q, (snap) => {
+    const out = [];
+    snap.forEach((ch) => out.push({ id: ch.key, ...ch.val() }));
+    out.sort((a,b)=> (b.lastOfflineAt||0) - (a.lastOfflineAt||0));
+    cb(out);
+  });
+}
+
+export async function clearOfflineMessagesAsAdmin(reqId){
+  if(!reqId) throw new Error("clearOfflineMessagesAsAdmin: reqId is required");
+  // delete thread + clear summary fields so it disappears from the admin inbox
+  await remove(ref(db, `offlineMessages/${reqId}`));
+  await update(ref(db), {
+    [`requests/${reqId}/lastOfflineAt`]: 0,
+    [`requests/${reqId}/lastOfflineFrom`]: "",
+    [`requests/${reqId}/lastOfflineText`]: ""
+  });
+}
+
+export async function sendAdminReply({ reqId, adminUid, text }){
+  if(!reqId) throw new Error("sendAdminReply: reqId is required");
+  if(!adminUid) throw new Error("sendAdminReply: adminUid is required");
+  const t = (text||"").trim();
+  if(!t) throw new Error("sendAdminReply: empty");
+  await update(ref(db, `requests/${reqId}`), {
+    adminReplyText: t.slice(0, 800),
+    adminReplyAt: Date.now(),
+    adminReplyBy: adminUid
+  });
+}
+
 
 export async function saveFcmToken(uid, token) {
   if (!uid) throw new Error("saveFcmToken: uid is required");

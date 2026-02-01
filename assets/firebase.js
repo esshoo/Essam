@@ -23,7 +23,12 @@ import {
   serverTimestamp,
   query,
   orderByChild,
-  equalTo
+  equalTo,
+  startAt,
+  endAt,
+  limitToFirst,
+  limitToLast,
+  remove
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
 
 import {
@@ -45,6 +50,6 @@ const authReady = setPersistence(auth, browserLocalPersistence).catch(() => {
 export {
   app, auth, db, authReady,
   GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged,
-  ref, get, set, push, update, onValue, serverTimestamp, query, orderByChild, equalTo,
+  ref, get, set, push, update, onValue, serverTimestamp, query, orderByChild, equalTo, startAt, endAt, limitToFirst, limitToLast, remove,
   getMessaging, getToken, onMessage, isSupported
 };

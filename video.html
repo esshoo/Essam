@@ -46,7 +46,8 @@
     </div>
     <div class="row">
       <span class="pill" id="status">...</span>
-      <button class="btn danger" id="btnEnd">إنهاء</button>
+      <button class="btn" id="btnHangup">إغلاق المكالمة</button>
+      <button class="btn danger" id="btnEnd">إنهاء الجلسة</button>
     </div>
   </div>
 
@@ -110,6 +111,8 @@
   import { isAdmin, closeRequestAsAdmin, listenRequest } from "./assets/db.js";
   import { db, ref, get } from "./assets/firebase.js";
   import { toast } from "./assets/ui.js";
+  import { notifyLocal } from "./assets/notifications.js";
+  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
 
   const qs = new URLSearchParams(location.search);
   const roomId = qs.get("room") || "";
@@ -117,6 +120,7 @@
 
   const hdr = document.getElementById("hdr");
   const statusEl = document.getElementById("status");
+  const btnHangup = document.getElementById("btnHangup");
   const roomInfo = document.getElementById("roomInfo");
   const meLabel = document.getElementById("meLabel");
   const otherLabel = document.getElementById("otherLabel");
@@ -125,6 +129,8 @@
   const remoteVideo = document.getElementById("remoteVideo");
 
   const btnEnd = document.getElementById("btnEnd");
+
+  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
   const btnCallAudio = document.getElementById("btnCallAudio");
   const btnCallVideo = document.getElementById("btnCallVideo");
   const btnMic = document.getElementById("btnMic");
@@ -259,6 +265,24 @@
     }
   }
 
+
+  btnHangup.addEventListener("click", ()=>{
+    try{
+      if(call){ call.close(); call = null; }
+      // keep data-channel open for chat/files
+      if(localStream){
+        localStream.getTracks().forEach(t=> t.stop());
+        localStream = null;
+      }
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+      system("تم إغلاق المكالمة. يمكنك مواصلة الدردشة أو بدء مكالمة جديدة.");
+      beep();
+    }catch(e){
+      console.error(e);
+    }
+  });
+
   btnEnd.addEventListener("click", async ()=>{
     btnEnd.disabled = true;
     system("جاري إنهاء الجلسة...");
@@ -296,10 +320,14 @@
           const n = data.name || otherName;
           otherLabel.textContent = `الطرف الآخر (${n})`;
           system(`اتصل: ${n}`);
+          pop();
+          notifyLocal("تم الاتصال", `تم الاتصال بـ ${n}`, location.href);
           return;
         }
         if(data.type === "chat"){
           addMsg({ who: data.name || otherName, text: escapeHtml(data.text), kind:"" });
+          beep();
+          notifyLocal("رسالة جديدة", (data.text||"").slice(0,120), location.href);
           return;
         }
         if(data.type === "file"){
@@ -318,6 +346,8 @@
         }
         if(data.type === "session-end"){
           system("الطرف الآخر أنهى الجلسة.");
+          errorBeep();
+          notifyLocal("انتهت الجلسة", "الطرف الآخر أنهى الجلسة", location.href);
           await endSession("peer-ended");
           redirectBack(user, admin);
           return;
@@ -330,6 +360,8 @@
     conn.on("close", async ()=>{
       setStatus("⚠️ انقطع الاتصال");
       system("تم فصل الاتصال");
+      errorBeep();
+      notifyLocal("انقطع الاتصال", "تم فصل الاتصال", location.href);
       closeCall();
       if(admin){
         // لو انقطع بدون إنهاء، اقفل الجلسة لحماية الرابط

@@ -26,3 +26,23 @@ export function randomToken(len=28){
   crypto.getRandomValues(new Uint8Array(len)).forEach(n=> out += chars[n%chars.length]);
   return out;
 }
+
+
+export function escapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+export function fmtTime(ms){
+  const t = Number(ms||0);
+  if(!t) return "—";
+  try{
+    return new Date(t).toLocaleString("ar-EG", { hour12:true });
+  }catch{
+    return String(t);
+  }
+}
