@@ -63,40 +63,184 @@
 
 <script type="module">
   import { requireAuth, logout } from "./assets/auth.js";
-  // ✅ تم التصحيح هنا أيضاً
-  import { isAdmin, createRequest, listenRequest, sendOfflineMessage } from "./assets/db.js";
+  import { isAdmin, createRequest, listenMyRequest, sendOfflineMessage } from "./assets/db.js";
   import { toast } from "./assets/ui.js";
-  // ... (بقية الاستيرادات)
+  import { initMessaging, wireNotificationButton, notifyLocal } from "./assets/notifications.js";
+  import { primeAudio, beep, pop, errorBeep } from "./assets/sounds.js";
+
+  const who = document.getElementById("who");
+  const btnLogout = document.getElementById("btnLogout");
+  const btnSwitch = document.getElementById("btnSwitch");
+  const btnSend = document.getElementById("btnSend");
+  const guestName = document.getElementById("guestName");
+  const phone = document.getElementById("phone");
+  const note = document.getElementById("note");
+  const statusBadge = document.getElementById("statusBadge");
+  const reqInfo = document.getElementById("reqInfo");
+  const offlineText = document.getElementById("offlineText");
+  const btnOffline = document.getElementById("btnOffline");
+
+  window.addEventListener("pointerdown", () => primeAudio(), { once:true });
 
   const user = await requireAuth("index.html");
 
-  function watch(uid){
-    if(!uid) return;
-    // ✅ استدعاء الدالة الصحيحة
-    listenRequest(uid, (r) => {
-      if(!r) return;
+  // لو أدمن: تحويل للوحة المدير
+  if (await isAdmin(user.uid, user.email || "")) location.replace("admin.html");
+
+  // لو مش anonymous يبقى عميل
+  if (!user.isAnonymous) location.replace("client.html");
+
+  const savedName = localStorage.getItem("guestName") || "";
+  if(savedName) guestName.value = savedName;
+
+  function getName(){
+    const n = (guestName.value||"").trim();
+    return n || "ضيف";
+  }
+
+  who.textContent = savedName ? `مرحباً ${savedName}` : `مرحباً ${getName()}`;
+
+  try { await initMessaging(); } catch {}
+  wireNotificationButton("#btnEnableNotifs");
+
+  btnLogout.addEventListener("click", async ()=>{
+    await logout();
+    location.replace("index.html");
+  });
+
+  btnSwitch.addEventListener("click", async ()=>{
+    await logout();
+    location.replace("index.html");
+  });
+
+  let currentReqId = localStorage.getItem("guestReqId") || "";
+  let lastStatus = "";
+  let lastAdminReplyAt = 0;
+
+  function clearReq(){
+    currentReqId = "";
+    localStorage.removeItem("guestReqId");
+    lastStatus = "";
+    lastAdminReplyAt = 0;
+    statusBadge.textContent = "—";
+    reqInfo.innerHTML = "";
+  }
+
+  function watch(id){
+    if(!id) return;
+    statusBadge.textContent = "جارٍ المتابعة…";
+    listenMyRequest(id, (r)=>{
+      if(!r){
+        statusBadge.textContent = "غير موجود";
+        return;
+      }
       const status = r.status || "—";
       statusBadge.textContent = status;
-      // ... (منطق التنبيهات)
+      reqInfo.innerHTML = `<div class="small">Request ID: <b>${id}</b></div>`;
+
+      if(r.adminReplyAt && r.adminReplyAt !== lastAdminReplyAt){
+        lastAdminReplyAt = r.adminReplyAt;
+        beep();
+        toast("رسالة من المدير", r.adminReplyText || "");
+        notifyLocal("رسالة من المدير", r.adminReplyText || "", location.href);
+      }
+
+      if(status !== lastStatus){
+        lastStatus = status;
+
+        if(status === "accepted" && r.roomId && r.roomToken){
+          pop();
+          toast("تم قبول الاتصال", "سيتم فتح غرفة التواصل تلقائياً");
+          notifyLocal("تم قبول الاتصال", "اضغط للدخول إلى الغرفة", `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`);
+          setTimeout(()=>{
+            location.href = `video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}`;
+          }, 400);
+        }
+
+        if(status === "rejected"){
+          errorBeep();
+          toast("تم رفض الطلب", "يمكنك إرسال طلب جديد");
+          notifyLocal("تم رفض الطلب", "يمكنك إرسال طلب جديد", location.href);
+          clearReq();
+        }
+
+        if(status === "closed"){
+          beep();
+          toast("انتهت الجلسة", "لو محتاج تواصل مرة أخرى، أرسل طلب جديد");
+          notifyLocal("انتهت الجلسة", "أرسل طلب جديد عند الحاجة", location.href);
+          clearReq();
+        }
+      }
+
+      if(status === "pending"){
+        reqInfo.innerHTML += `<div class="small" style="margin-top:10px">انتظر قبول المدير…</div>`;
+      }
+
+      if(status === "accepted" && r.roomId && r.roomToken){
+        reqInfo.innerHTML += `<div style="margin-top:10px">
+          <a class="btn ok" href="video.html?room=${encodeURIComponent(r.roomId)}&token=${encodeURIComponent(r.roomToken)}">دخول غرفة التواصل</a>
+        </div>`;
+      }
     });
   }
-  
-  // استخدام الـ UID الثابت للضيف لمنع التكرار
-  watch(user.uid);
+  if(currentReqId) watch(currentReqId);
 
-  btnSend.addEventListener("click", async () => {
+  guestName.addEventListener("input", ()=>{
+    localStorage.setItem("guestName", getName());
+    who.textContent = `مرحباً ${getName()}`;
+  });
+
+  btnSend.addEventListener("click", async ()=>{
     btnSend.disabled = true;
-    try {
-      const nm = (guestName.value || "").trim() || "ضيف";
-      await createRequest({
+    try{
+      await primeAudio();
+      const nm = getName();
+      localStorage.setItem("guestName", nm);
+
+      const ph = (phone.value||"").trim();
+      const nt = (note.value||"").trim();
+      if(!nt) throw new Error("اكتب وصف المشكلة.");
+      const res = await createRequest({
         createdByUid: user.uid,
         createdByType: "guest",
         displayName: nm,
-        note: note.value
+        email: "",
+        phone: ph,
+        note: nt
       });
-      toast("تم إرسال الطلب");
-    } catch(e) { toast("خطأ"); }
-    finally { btnSend.disabled = false; }
+      currentReqId = res.reqId;
+      localStorage.setItem("guestReqId", currentReqId);
+      pop();
+      toast("تم إرسال الطلب", "انتظر قبول المدير.");
+      watch(currentReqId);
+    }catch(e){
+      console.error(e);
+      errorBeep();
+      toast("تعذّر إرسال الطلب", e?.message || "");
+    }finally{ btnSend.disabled = false; }
+  });
+
+  btnOffline.addEventListener("click", async ()=>{
+    btnOffline.disabled = true;
+    try{
+      await primeAudio();
+      if(!currentReqId) throw new Error("أرسل طلباً أولاً.");
+      const t = (offlineText.value||"").trim();
+      if(!t) throw new Error("اكتب الرسالة.");
+      await sendOfflineMessage({
+        reqId: currentReqId,
+        fromUid: user.uid,
+        fromName: getName(),
+        text: t
+      });
+      offlineText.value = "";
+      pop();
+      toast("تم إرسال الرسالة", "سيشاهدها المدير في لوحة التحكم.");
+    }catch(e){
+      console.error(e);
+      errorBeep();
+      toast("تعذّر الإرسال", e?.message || "");
+    }finally{ btnOffline.disabled = false; }
   });
 </script>
 </body>

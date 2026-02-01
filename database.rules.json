@@ -2,22 +2,64 @@
   "rules": {
     ".read": false,
     ".write": false,
-    "requests": {
+    "admins": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())",
-        ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())"
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "requests": {
+      "$rid": {
+        ".read": "auth != null && (data.child('createdByUid').val() === auth.uid || root.child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && ( ( !data.exists() && newData.child('createdByUid').val() === auth.uid ) || root.child('admins').child(auth.uid).val() === true )",
+        ".validate": "newData.hasChildren(['createdByUid','createdByType','status','createdAt'])",
+        "lastOfflineAt": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isNumber()"
+        },
+        "lastOfflineFrom": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "lastOfflineText": {
+          ".write": "auth != null && data.parent().exists() && (root.child('admins').child(auth.uid).val() === true || data.parent().child('createdByUid').val() === auth.uid)",
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        }
       },
-      ".indexOn": ["status", "lastOfflineAt"]
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".indexOn": [
+        "status",
+        "createdAt",
+        "lastOfflineAt"
+      ]
+    },
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && data.child('participants').child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      }
     },
     "offlineMessages": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())",
+      "$rid": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('requests').child($rid).child('createdByUid').val() === auth.uid)",
         "$mid": {
-          ".write": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).exists())"
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('requests').child($rid).child('createdByUid').val() === auth.uid)"
         }
       }
     },
-    "admins": { "$uid": { ".read": "auth != null && auth.uid === $uid" } },
-    "fcmTokens": { "$uid": { ".read": "auth.uid === $uid", "$tok": { ".write": "auth.uid === $uid" } } }
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+      }
+    },
+    "fcmTokens": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$token": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
   }
 }
