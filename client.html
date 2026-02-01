@@ -77,36 +77,44 @@
             }
         });
 
-        window.submitRequest = function() {
-            const phone = document.getElementById('phone').value;
-            if(!phone) return alert("يرجى كتابة رقم الهاتف");
+// استبدل دالة submitRequest في ملف client.html بهذا الكود:
+window.submitRequest = function() {
+    const phone = document.getElementById('phone').value;
+    if(!phone) return alert("يرجى كتابة رقم الهاتف");
 
-            document.getElementById('form-card').classList.add('hidden');
-            document.getElementById('waiting-card').classList.remove('hidden');
+    // التحقق من وجود UID قبل الإرسال
+    if(!userUid) return alert("جاري تحميل بيانات المستخدم، حاول ثانية");
 
-            const newRequestRef = push(ref(db, 'requests'));
-            const reqId = newRequestRef.key;
-            
-            set(newRequestRef, {
-                name: userName + " (Google)",
-                phone: phone,
-                status: 'pending',
-                timestamp: Date.now(),
-                createdByUid: myUid // ✅ تم التعديل ليطابق Rules
-            });
+    document.getElementById('form-card').classList.add('hidden');
+    document.getElementById('waiting-card').classList.remove('hidden');
 
-            // مراقبة الرد
-            onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
-                const status = snapshot.val();
-                if (status === 'accepted') {
-                    // تحويل لغرفة الفيديو
-                    window.location.href = `video.html?room=${reqId}&role=client`;
-                } else if (status === 'rejected') {
-                    alert("نعتذر، لا يمكن الرد حالياً.");
-                    location.reload();
-                }
-            });
+    const newRequestRef = push(ref(db, 'requests'));
+    const reqId = newRequestRef.key;
+    
+    // التعديل هنا: استخدام createdByUid بدلاً من uid
+    set(newRequestRef, {
+        name: userName + " (Google)",
+        phone: phone,
+        status: 'pending',
+        timestamp: Date.now(),
+        createdByUid: userUid // تم الإصلاح هنا
+    }).catch(error => {
+        console.error("خطأ في الإرسال:", error);
+        alert("فشل الإرسال: " + error.message);
+    });
+
+    // مراقبة الرد
+    onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
+        const status = snapshot.val();
+        if (status === 'accepted') {
+            window.location.href = `video.html?room=${reqId}&role=client`;
+        } else if (status === 'rejected') {
+            document.getElementById('wait-title').innerText = "المهندس غير متاح حالياً";
+            document.getElementById('wait-msg').innerText = "يمكنك ترك رسالة وسنرد عليك عبر البريد الإلكتروني.";
+            showClientMsg(); 
         }
+    });
+}
 
         window.logout = function() {
             signOut(auth).then(() => window.location.href = "index.html");
