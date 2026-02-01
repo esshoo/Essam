@@ -9,6 +9,7 @@
         body { font-family: 'Tajawal', sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 90%; max-width: 400px; text-align: center; }
         .user-img { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; border: 3px solid #0088cc; }
+        input { width: 100%; padding: 10px; margin-top: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; }
         button { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
         .hidden { display: none; }
     </style>
@@ -38,10 +39,20 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        const firebaseConfig = { /* بياناتك هنا */ };
+        // ⚠️ ضع بياناتك هنا من الـ Console الخاص بـ Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSy...",
+            authDomain: "your-app.firebaseapp.com",
+            databaseURL: "https://your-app-default-rtdb.firebaseio.com",
+            projectId: "your-app-id",
+            storageBucket: "your-app.appspot.com",
+            messagingSenderId: "...",
+            appId: "..."
+        };
+
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
         const auth = getAuth(app);
@@ -52,8 +63,8 @@
             if (user) {
                 userUid = user.uid;
                 userName = user.displayName;
-                document.getElementById('user-photo').src = user.photoURL;
-                document.getElementById('welcome-msg').innerText = "مرحباً " + userName;
+                document.getElementById('user-photo').src = user.photoURL || 'https://via.placeholder.com/80';
+                document.getElementById('welcome-msg').innerText = "مرحباً " + (userName || "بك");
             } else {
                 window.location.href = "index.html";
             }
@@ -62,6 +73,7 @@
         window.submitRequest = function() {
             const phone = document.getElementById('phone').value;
             if(!phone) return alert("يرجى كتابة رقم الهاتف");
+            if(!userUid) return alert("خطأ: لم يتم التعرف على المستخدم");
 
             document.getElementById('form-card').classList.add('hidden');
             document.getElementById('waiting-card').classList.remove('hidden');
@@ -70,14 +82,13 @@
             const reqId = newRequestRef.key;
 
             set(newRequestRef, {
-                name: userName,
+                name: userName || "عميل",
                 phone: phone,
                 status: 'pending',
                 timestamp: Date.now(),
-                createdByUid: userUid // تم الإصلاح هنا ليتوافق مع Rules
+                createdByUid: userUid // مطابقة للـ Rules
             });
 
-            // مراقبة الحالة للانتقال لصفحة الفيديو
             onValue(ref(db, `requests/${reqId}/status`), (snapshot) => {
                 const status = snapshot.val();
                 if (status === 'accepted') {
@@ -89,28 +100,19 @@
             });
         }
 
-        window.logout = function() {
-            signOut(auth).then(() => window.location.href = "index.html");
-        }
-
+        window.logout = function() { signOut(auth).then(() => window.location.href = "index.html"); }
         window.showClientMsg = function() {
             document.getElementById('client-actions').classList.add('hidden');
             document.getElementById('client-msg-form').classList.remove('hidden');
         }
-
         window.sendClientMessage = function() {
             const content = document.getElementById('c-msg-content').value;
             if(!content) return alert("اكتب رسالتك");
             push(ref(db, 'messages'), {
                 name: userName,
-                contact: auth.currentUser.email,
                 content: content,
-                type: 'Google User',
                 timestamp: Date.now()
-            }).then(() => {
-                alert("تم الإرسال بنجاح");
-                location.reload();
-            });
+            }).then(() => { alert("تم الإرسال"); location.reload(); });
         }
     </script>
 </body>
